@@ -20,19 +20,9 @@ function tick() {
   clock.value = new Date().toLocaleTimeString('zh-CN', { hour12: false })
 }
 
-function onPicked(id: number, name: string) {
-  localStorage.setItem('cc_class', String(id))
-  localStorage.setItem('cc_class_name', name)
-  className.value = name
-  picked.value = true
-  ws?.subscribe(id)
-}
-
-onMounted(() => {
-  forceDark()
-  tick(); timer = window.setInterval(tick, 1000)
+function connect(sub?: number) {
   ws = connectWS({
-    classId: classId ?? undefined,
+    classId: sub,
     onStatus: v => (online.value = v),
     onCall: (call) => {
       cards.value = [call, ...cards.value].slice(0, 3)
@@ -44,6 +34,35 @@ onMounted(() => {
       marquee.value = marquee.value.filter(c => c.id !== id)
     },
   })
+}
+
+function onPicked(id: number, name: string) {
+  localStorage.setItem('cc_class', String(id))
+  localStorage.setItem('cc_class_name', name)
+  className.value = name
+  picked.value = true
+  if (ws) ws.subscribe(id)
+  else connect(id) // 陈旧校验清除了记忆 → 此刻才建连
+}
+
+onMounted(async () => {
+  forceDark()
+  tick(); timer = window.setInterval(tick, 1000)
+  // 陈旧班级校验(Task-15 review B):换库后记忆的 class_id 失配 → 清除并重选班级;
+  // 拉取失败则保留记忆照常连接(离线韧性)。校验落地后才连 WS。
+  if (classId !== null) {
+    try {
+      const list = await api.classes()
+      if (!list.some(c => c.id === classId)) {
+        localStorage.removeItem('cc_class')
+        localStorage.removeItem('cc_class_name')
+        className.value = ''
+        picked.value = false
+        return
+      }
+    } catch { /* 服务器暂不可达:按记忆直连,WS 自带重连 */ }
+  }
+  connect(classId ?? undefined)
 })
 onUnmounted(() => { ws?.close(); clearInterval(timer) })
 

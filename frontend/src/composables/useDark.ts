@@ -3,10 +3,12 @@ import { ref } from 'vue'
 const isDark = ref(false)
 const KEY = 'cc_theme'
 
-function apply(dark: boolean) {
+// persist=false:仅本会话视觉态(显示端 forceDark),不写 localStorage —— 否则会把
+// 同一 WebView2 profile 下共存的老师端主题也翻成深色(Task-15 review A)
+function apply(dark: boolean, persist = true) {
   isDark.value = dark
   document.documentElement.classList.toggle('dark', dark)
-  localStorage.setItem(KEY, dark ? 'dark' : 'light')
+  if (persist) localStorage.setItem(KEY, dark ? 'dark' : 'light')
 }
 
 export function useDark() {
@@ -32,6 +34,6 @@ export function useDark() {
       )
     }).catch(() => { /* 中断即放弃 */ })
   }
-  function forceDark() { apply(true) }
+  function forceDark() { apply(true, false) }
   return { isDark, initTheme, toggleDark, forceDark }
 }
