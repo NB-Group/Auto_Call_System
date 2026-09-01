@@ -167,6 +167,27 @@ async def test_negative_limit_clamped_to_one(client):
     assert len(await r.json()) == 1
 
 
+async def test_today_lists_own_calls_desc(client):
+    """/api/calls/today:返回本人当日记录(id 降序),撤销的仍列出并带 retracted_at。
+    回归:原 SQL 的 FROM calls 无别名,而 _today_where() 引用 c.created_at,
+    端点 500(sqlite3.OperationalError: no such column: c.created_at)。"""
+    headers = await auth(client)
+    c1 = (await (await client.post("/api/calls", json={"student_id": 1},
+                                   headers=headers)).json())["call"]["id"]
+    c2 = (await (await client.post("/api/calls", json={"student_id": 1},
+                                   headers=headers)).json())["call"]["id"]
+    r = await client.get("/api/calls/today", headers=headers)
+    assert r.status == 200
+    calls = (await r.json())["calls"]
+    assert [c["id"] for c in calls] == [c2, c1]
+    assert await client.delete(f"/api/calls/{c2}", headers=headers)
+    calls = (await (await client.get("/api/calls/today",
+                                     headers=headers)).json())["calls"]
+    assert len(calls) == 2
+    assert calls[0]["retracted_at"] is not None
+    assert calls[1]["retracted_at"] is None
+
+
 async def test_admin_undo_bypasses_window(client):
     """admin 撤销绕过 60s 窗口与归属检查(controllers 裁定)。"""
     headers = await auth(client)

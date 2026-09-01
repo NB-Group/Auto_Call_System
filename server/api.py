@@ -162,7 +162,7 @@ def setup_business_routes(router: web.UrlDispatcher) -> None:
     async def today(request):
         db, t = request.app["db"], request["teacher"]
         rows = db.execute(
-            f"SELECT id FROM calls WHERE teacher_id={t['id']} "
+            f"SELECT id FROM calls c WHERE teacher_id={t['id']} "
             f"AND {_today_where()} ORDER BY id DESC").fetchall()
         return web.json_response(
             {"calls": [call_row(db, r["id"]) for r in rows]})
