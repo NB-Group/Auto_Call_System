@@ -1,5 +1,6 @@
 import json
 import socket
+import threading
 import time
 
 from app.discovery import find_server
@@ -37,3 +38,35 @@ def test_packet_shape():
     sock.close(); b.stop()
     pkt = json.loads(data)
     assert pkt["app"] == "call-center"
+
+
+def test_find_server_ignores_malformed_packets():
+    # 畸形包(合法 JSON 非 dict / 缺 port+version / 非 JSON)不得让 find_server 抛错或卡死
+    result = []
+    t = threading.Thread(target=lambda: result.append(find_server(timeout=2.0)))
+    t.start()
+    time.sleep(0.3)  # 等 find_server 绑定并阻塞在 recvfrom
+    bad = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # 未 bind,单播直发即可
+    for payload in (b"123", b'{"app":"call-center"}', b"not-json"):
+        bad.sendto(payload, ("127.0.0.1", DISCOVERY_PORT))
+    bad.close()
+    b = Broadcaster(8800, "0.1.0", interval=0.2)
+    b._send_once(("127.0.0.1", DISCOVERY_PORT))  # 单播回环 → host 应为 127.0.0.1
+    b.stop()
+    t.join(timeout=3.0)
+    assert result and result[0] == {"host": "127.0.0.1", "port": 8800,
+                                    "version": "0.1.0"}
+
+
+def test_find_server_none_on_all_bad():
+    # 只有畸形包:不抛错,超时后返回 None
+    result = []
+    t = threading.Thread(target=lambda: result.append(find_server(timeout=0.6)))
+    t.start()
+    time.sleep(0.3)
+    bad = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    for payload in (b"123", b'{"app":"call-center"}', b"not-json"):
+        bad.sendto(payload, ("127.0.0.1", DISCOVERY_PORT))
+    bad.close()
+    t.join(timeout=2.0)
+    assert result and result[0] is None
