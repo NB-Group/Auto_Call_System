@@ -12,9 +12,26 @@ function apply(dark: boolean) {
 export function useDark() {
   function initTheme() {
     const saved = localStorage.getItem(KEY)
-    apply(saved ? saved === 'dark'
-      : matchMedia('(prefers-color-scheme: dark)').matches)
+    apply(saved ? saved === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches)
   }
-  function toggleDark() { apply(!isDark.value) }
-  return { isDark, initTheme, toggleDark }
+  function toggleDark(ev?: MouseEvent) {
+    const toDark = !isDark.value
+    const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches
+    const doc = document as Document & {
+      startViewTransition?: (cb: () => void) => { ready: Promise<void> }
+    }
+    if (!doc.startViewTransition || reduce) { apply(toDark); return }
+    const x = ev?.clientX ?? innerWidth / 2
+    const y = ev?.clientY ?? innerHeight / 2
+    const r = Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y))
+    const vt = doc.startViewTransition(() => apply(toDark))
+    vt.ready.then(() => {
+      document.documentElement.animate(
+        { clipPath: [`circle(0px at ${x}px ${y}px)`, `circle(${r}px at ${x}px ${y}px)`] },
+        { duration: 550, easing: 'ease-in-out', pseudoElement: '::view-transition-new(root)' },
+      )
+    }).catch(() => { /* 中断即放弃 */ })
+  }
+  function forceDark() { apply(true) }
+  return { isDark, initTheme, toggleDark, forceDark }
 }

@@ -21,7 +21,7 @@ async function logout() {
       <b>叫号中心</b>
       <span text-13px style="color: var(--cc-text-3)">{{ name }} · {{ office }}</span>
     </div>
-    <!-- useDark().toggleDark 为 0 参函数,直接绑定方法引用 -->
+    <!-- 方法引用绑定:click 事件作为 toggleDark(ev) 首参 → 圆形揭示以按钮为圆心 -->
     <button class="cc-btn" title="切换主题" @click="toggleDark">
       {{ isDark ? '☀️' : '🌙' }}
     </button>
