@@ -127,13 +127,13 @@ async def test_import_separators_fullwidth_and_dunhao(client):
     cid = (await r.json())["id"]
 
     r = await client.post(f"/api/admin/classes/{cid}/students", json={
-        "text": "王小雨,李涵文 0305,梁皓文、刘昊然"}, headers=h)
+        "text": "王小雨，李涵文 0305,梁皓文、刘昊然"}, headers=h)
     body = await r.json()
     assert body["imported"] == 4 and body["skipped"] == []
 
     # 同一批再导 → 全部 skip(去重逻辑不受新分隔符影响)
     r = await client.post(f"/api/admin/classes/{cid}/students", json={
-        "text": "王小雨,李涵文 0305,梁皓文、刘昊然"}, headers=h)
+        "text": "王小雨，李涵文 0305,梁皓文、刘昊然"}, headers=h)
     body = await r.json()
     assert body["imported"] == 0 and sorted(body["skipped"]) == \
         sorted(["王小雨", "李涵文", "梁皓文", "刘昊然"])
