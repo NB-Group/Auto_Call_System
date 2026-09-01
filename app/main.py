@@ -1,8 +1,10 @@
 """入口:角色解析 → 发现/启动服务器 → 打开 pywebview 窗口。"""
 import argparse
 import json
+import sys
 import threading
 import time
+import traceback
 
 import webview
 
@@ -56,7 +58,13 @@ def main():
 
     if role == "server":
         from server.serve import start_server
-        start_server(static_dir=None)
+        try:
+            start_server(static_dir=None)
+        except Exception as e:  # 端口占用等:弹窗报错,不静默退(I6)
+            webview.create_window("服务器启动失败", html=_error_html(str(e)),
+                                  js_api=bridge)
+            _start_gui()
+            return
         url = "http://127.0.0.1:8800/#/server"
     else:
         url = resolve_server_url(args.server_url, args.dev)
@@ -66,7 +74,9 @@ def main():
             if role in ("teacher", "display"):
                 threading.Thread(target=_stage_and_notify, args=(window,),
                                  daemon=True).start()
-            webview.start()
+                threading.Thread(target=_retry_find_server,
+                                 args=(window, role), daemon=True).start()
+            _start_gui()
             return
         url = f"{url}/#/{role}"
 
@@ -77,7 +87,7 @@ def main():
     if role in ("teacher", "display"):
         threading.Thread(target=_stage_and_notify, args=(window,),
                          daemon=True).start()
-    webview.start()
+    _start_gui()
     tts.stop()
 
 
@@ -102,20 +112,108 @@ def _stage_and_notify(window) -> None:
         pass  # 更新是尽力而为:任何失败都不得影响主窗口
 
 
+def _retry_find_server(window, role: str) -> None:
+    """离线重试:每 3s 找一次服务器,找到即把窗口切到正式页面(I5)。
+
+    load_url 线程安全(pywebview 内部派发到 GUI 线程);窗口已被用户
+    关闭时抛错,吞掉即止。窗口关闭 → webview.start() 返回 → 进程正常退出。
+    """
+    while True:
+        found = find_server(timeout=3.0)
+        if found is not None:
+            try:
+                window.load_url(
+                    f"http://{found['host']}:{found['port']}/#/{role}")
+            except Exception:
+                pass
+            return
+        time.sleep(3.0)
+
+
+def _start_gui() -> None:
+    """webview.start() 统一包装:GUI 起不来(如缺 WebView2)时落盘排障(I9)。
+
+    无控制台的打包 exe 里异常一闪而过;写 data/startup-error.txt 到
+    base_dir 旁,再重抛(有控制台的场景 stderr 仍可见)。
+    """
+    try:
+        webview.start()
+    except Exception:
+        tb = traceback.format_exc()
+        print(tb, file=sys.stderr)
+        try:
+            from app.config import base_dir
+            err_dir = base_dir() / "data"
+            err_dir.mkdir(parents=True, exist_ok=True)
+            (err_dir / "startup-error.txt").write_text(tb, encoding="utf-8")
+        except OSError:
+            pass  # 落盘也失败:只剩重抛
+        raise
+
+
 def _pick_role_dialog():
-    """无 GUI 组建可用前的极简角色选择:控制台。"""
-    print("首次运行,选择本机角色:")
-    print("  1. 服务器(办公室常驻机)")
-    print("  2. 老师端")
-    print("  3. 显示端(教室大屏)")
-    choice = input("输入 1/2/3 对应数字: ").strip()
-    return {"1": "server", "2": "teacher", "3": "display"}.get(choice)
+    """首启角色选择:pywebview 按钮小窗(C1)。
+
+    打包后无控制台,控制台 input() 必 EOFError 崩溃 → GUI 选择。
+    直接关窗不选 → None → 进程安静退出(下次启动再问)。
+    """
+    holder: dict = {}
+    webview.create_window("选择本机角色", html=_picker_html(),
+                          js_api=_PickerApi(holder), width=560, height=430,
+                          resizable=False)
+    _start_gui()
+    return holder.get("role")
+
+
+class _PickerApi:
+    """角色选择窗 js_api:记录所选角色并关窗。"""
+
+    def __init__(self, holder: dict):
+        self.holder = holder
+
+    def choose(self, role: str) -> None:
+        self.holder["role"] = role
+        if webview.windows:
+            webview.windows[0].destroy()
+
+
+def _picker_html() -> str:
+    return """<!doctype html><html><head><meta charset="utf-8"><style>
+body{margin:0;height:100vh;display:flex;flex-direction:column;
+justify-content:center;align-items:center;font-family:'Microsoft YaHei',
+system-ui,sans-serif;background:linear-gradient(135deg,#16283f,#0b1220);
+color:#fff}
+h2{margin:0 0 4px;font-size:22px;font-weight:600}
+p{margin:0 0 22px;font-size:13px;opacity:.65}
+.menu{display:flex;flex-direction:column;gap:14px;width:78%}
+button{padding:16px 20px;font-size:19px;color:#fff;cursor:pointer;
+border:1px solid rgba(255,255,255,.22);border-radius:14px;
+background:rgba(255,255,255,.07);transition:background .15s;text-align:center}
+button:hover{background:rgba(255,255,255,.16)}
+small{display:block;font-size:12px;opacity:.6;margin-top:4px}
+</style></head><body>
+<h2>首次运行:选择本机角色</h2>
+<p>选择会保存在本机,下次启动不再询问</p>
+<div class="menu">
+<button onclick="pywebview.api.choose('server')">服务器<small>办公室常驻机</small></button>
+<button onclick="pywebview.api.choose('teacher')">老师端</button>
+<button onclick="pywebview.api.choose('display')">显示端<small>教室大屏</small></button>
+</div></body></html>"""
 
 
 def _offline_html() -> str:
     return ("<html><body style='font-family:sans-serif;padding:40px'>"
-            "<h2>未找到叫号服务器</h2>"
-            "<p>请确认办公室服务器电脑已开启;本窗口关闭后将自动重试。</p>"
+            "<h2>正在寻找叫号服务器…</h2>"
+            "<p>找到后自动进入(也可关闭后重开)。</p>"
+            "</body></html>")
+
+
+def _error_html(err: str) -> str:
+    import html as html_escape
+    return ("<html><body style='font-family:sans-serif;padding:40px'>"
+            "<h2>服务器启动失败</h2>"
+            f"<p style='color:#b00'>{html_escape.escape(err)}</p>"
+            "<p>端口被占用?是否已开了一个实例?</p>"
             "</body></html>")
 
 

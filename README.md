@@ -30,5 +30,9 @@ v0.1.0 已发布;Release 附 `call-center-<版本>-x64.exe` 与 `latest.json`,�
 ## 换服务器机器
 拷走 `data/`(call.db + config.json)到新机,新机以服务器模式启动即可。
 
+## 排障(Windows)
+- **双击 exe 无反应 / 闪退**:看 exe 旁 `data/startup-error.txt`(启动异常的完整堆栈都落在这里;排障后删除该文件即可,不影响数据)。把堆栈发给我即可定位。
+- **提示/日志指向 WebView2 缺失**:安装 [WebView2 运行时](https://developer.microsoft.com/microsoft-edge/webview2/)后重开程序(绝大多数 Win11 已自带;部分精简版 LTSC 需手装)。
+
 ## 设计文档
 `docs/superpowers/specs/2026-09-01-call-system-design.md` · 接口契约 `docs/CONTRACTS.md`

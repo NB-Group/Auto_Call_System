@@ -120,6 +120,8 @@ def _setup_admin_routes(router):
         body = await request.json()
         if not body.get("username") or len(body.get("password", "")) < 6:
             return web.json_response({"error": "bad_request"}, status=400)
+        if body.get("role", "teacher") not in ("teacher", "admin"):
+            return web.json_response({"error": "bad_request"}, status=400)
         try:
             cur = request.app["db"].execute(
                 "INSERT INTO teachers(username,password_hash,role,"
@@ -137,6 +139,9 @@ def _setup_admin_routes(router):
             return r
         body = await request.json()
         tid = int(request.match_info["id"])
+        # 停用自己 → 唯一管理员锁死自己之外无人解锁,拒绝(I8)。
+        if body.get("disabled") and tid == request["teacher"]["id"]:
+            return web.json_response({"error": "bad_request"}, status=400)
         sets, vals = [], []
         for k in ("display_name", "office", "disabled"):
             if k in body:
@@ -197,7 +202,9 @@ def _setup_admin_routes(router):
             return web.json_response({"error": "not_found"}, status=404)
         text = (await request.json()).get("text", "")
         imported, skipped = 0, []
-        for line in text.replace(",", "\n").replace(",", "\n").splitlines():
+        # 分隔符:换行 + ASCII/全角逗号 + 顿号(中文名单粘贴最常见三种)。
+        for line in (text.replace(",", "\n").replace("，", "\n")
+                   .replace("、", "\n").splitlines()):
             line = line.strip()
             if not line:
                 continue

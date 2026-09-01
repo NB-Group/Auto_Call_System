@@ -5,6 +5,12 @@ const KEY = 'cc_theme'
 
 // persist=false:仅本会话视觉态(显示端 forceDark),不写 localStorage —— 否则会把
 // 同一 WebView2 profile 下共存的老师端主题也翻成深色(Task-15 review A)
+//
+// forced:显示端已强制深色后,initTheme 不得回改。挂载顺序是子先于父:
+// DisplayView.onMounted(forceDark) 先跑,App.onMounted(initTheme) 后跑,
+// 没有 forced 旗标时显示端会被 App 的 saved/system 主题打回浅色(I4)。
+let forced = false
+
 function apply(dark: boolean, persist = true) {
   isDark.value = dark
   document.documentElement.classList.toggle('dark', dark)
@@ -13,6 +19,7 @@ function apply(dark: boolean, persist = true) {
 
 export function useDark() {
   function initTheme() {
+    if (forced) { apply(true, false); return }
     const saved = localStorage.getItem(KEY)
     apply(saved ? saved === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches)
   }
@@ -34,6 +41,6 @@ export function useDark() {
       )
     }).catch(() => { /* 中断即放弃 */ })
   }
-  function forceDark() { apply(true, false) }
+  function forceDark() { forced = true; apply(true, false) }
   return { isDark, initTheme, toggleDark, forceDark }
 }

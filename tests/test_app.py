@@ -118,6 +118,58 @@ async def test_teacher_cannot_admin(client):
     assert r.status == 403
 
 
+async def test_import_separators_fullwidth_and_dunhao(client):
+    """终审 I3:半角/全角逗号 + 顿号都是分隔符;重复导入走 skipped。"""
+    token = create_session(client.db, 1)
+    h = {"Authorization": f"Bearer {token}"}
+    r = await client.post("/api/admin/classes", json={"name": "高一(2)班"},
+                          headers=h)
+    cid = (await r.json())["id"]
+
+    r = await client.post(f"/api/admin/classes/{cid}/students", json={
+        "text": "王小雨,李涵文 0305,梁皓文、刘昊然"}, headers=h)
+    body = await r.json()
+    assert body["imported"] == 4 and body["skipped"] == []
+
+    # 同一批再导 → 全部 skip(去重逻辑不受新分隔符影响)
+    r = await client.post(f"/api/admin/classes/{cid}/students", json={
+        "text": "王小雨,李涵文 0305,梁皓文、刘昊然"}, headers=h)
+    body = await r.json()
+    assert body["imported"] == 0 and sorted(body["skipped"]) == \
+        sorted(["王小雨", "李涵文", "梁皓文", "刘昊然"])
+
+
+async def test_admin_cannot_disable_self(client):
+    """终审 I8:停用自己 → 400(单管理员锁死);停用他人 → 200。"""
+    token = create_session(client.db, 1)  # admin 本人 id=1
+    h = {"Authorization": f"Bearer {token}"}
+    client.db.execute(
+        "INSERT INTO teachers(username,password_hash) VALUES ('t2',?)",
+        (hash_password("pw"),))
+    client.db.commit()
+
+    r = await client.put("/api/admin/teachers/1", json={"disabled": 1},
+                         headers=h)
+    assert r.status == 400
+    r = await client.put("/api/admin/teachers/2", json={"disabled": 1},
+                         headers=h)
+    assert r.status == 200
+
+
+async def test_add_teacher_rejects_bad_role(client):
+    """终审 #13:role 只允许 teacher/admin。"""
+    token = create_session(client.db, 1)
+    h = {"Authorization": f"Bearer {token}"}
+    r = await client.post("/api/admin/teachers", json={
+        "username": "bad", "password": "pw123456", "role": "superroot"},
+        headers=h)
+    assert r.status == 400
+    r = await client.post("/api/admin/teachers", json={
+        "username": "ok", "password": "pw123456", "role": "admin"},
+        headers=h)
+    assert r.status == 201
+
+
 async def test_static_index_served(client):
     r = await client.get("/")
     assert r.status == 200

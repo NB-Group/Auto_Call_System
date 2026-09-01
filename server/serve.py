@@ -9,7 +9,13 @@ from server.broadcast import Broadcaster
 DEFAULT_PORT = 8800
 
 
-def start_server(host="0.0.0.0", port=DEFAULT_PORT, db_path="data/call.db",
+def default_db_path():
+    """data/call.db,锚定 base_dir:frozen 在 exe 旁,源码运行在 CWD(I7)。"""
+    from app.config import base_dir  # 函数内导入,避免 server↔app 顶层环
+    return base_dir() / "data" / "call.db"
+
+
+def start_server(host="0.0.0.0", port=DEFAULT_PORT, db_path=None,
                  static_dir=None):
     """在后台线程跑 HTTP 服务,返回 (runner, thread, bcast, loop)。
 
@@ -20,6 +26,8 @@ def start_server(host="0.0.0.0", port=DEFAULT_PORT, db_path="data/call.db",
 
     同时启动 UDP 广播(Broadcaster),供客户端 find_server() 零配置发现。
     """
+    if db_path is None:
+        db_path = default_db_path()
     loop = asyncio.new_event_loop()
     ready = threading.Event()
     box: dict = {}
@@ -87,5 +95,5 @@ def stop_server(runner, loop, bcast):
 if __name__ == "__main__":
     import signal
     from server.app import create_app
-    web.run_app(create_app("data/call.db"), host="0.0.0.0",
+    web.run_app(create_app(default_db_path()), host="0.0.0.0",
                 port=DEFAULT_PORT, handle_signals=True)

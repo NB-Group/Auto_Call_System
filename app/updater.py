@@ -13,7 +13,7 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from app.config import load_config
+from app.config import base_dir, load_config
 
 DEFAULT_MIRRORS = [
     "",  # 直连
@@ -23,10 +23,10 @@ DEFAULT_MIRRORS = [
     "https://ghproxy.homeboyc.cn/",
     "https://gh.zwy.one/",
 ]
-# 锚定下载目录:frozen 包跟 exe 同盘同级,源码运行用工作区 data/。
+# 锚定下载目录:frozen 包跟 exe 同盘同级(updates/),源码运行用工作区 data/。
 # 在模块导入时求值(frozen 属性由 PyInstaller 在用户代码前设置)。
-UPDATE_DIR = (Path(sys.executable).parent / "updates"
-              if getattr(sys, "frozen", False) else Path("data/updates"))
+UPDATE_DIR = base_dir() / ("updates" if getattr(sys, "frozen", False)
+                           else "data/updates")
 
 
 def parse_version(v: str) -> tuple:
