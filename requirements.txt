@@ -1,0 +1,4 @@
+aiohttp>=3.9
+pywebview>=5.1
+bcrypt>=4.1
+pypinyin>=0.50

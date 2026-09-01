@@ -1,0 +1,70 @@
+{
+  "discovery_packet": {
+    "schema": {
+      "type": "object", "required": ["app", "port", "version"],
+      "properties": {
+        "app": {"const": "call-center"},
+        "port": {"type": "integer", "minimum": 1, "maximum": 65535},
+        "version": {"type": "string"}
+      }
+    },
+    "example": {"app": "call-center", "port": 8800, "version": "0.1.0"}
+  },
+  "call": {
+    "schema": {
+      "type": "object",
+      "required": ["id", "student_id", "class_id", "teacher_id", "message", "announce", "created_at", "student_name", "class_name", "teacher_name", "office"],
+      "properties": {
+        "id": {"type": "integer"},
+        "student_id": {"type": "integer"},
+        "class_id": {"type": "integer"},
+        "teacher_id": {"type": "integer"},
+        "message": {"type": "string"},
+        "announce": {"type": "string"},
+        "created_at": {"type": "string"},
+        "student_name": {"type": "string"},
+        "class_name": {"type": "string"},
+        "teacher_name": {"type": "string"},
+        "office": {"type": "string"}
+      }
+    },
+    "example": {"id": 1, "student_id": 3, "class_id": 2, "teacher_id": 1, "message": "订正数学作业,带上练习册", "announce": "请梁皓文同学到郑老师203办公室,订正数学作业,带上练习册", "created_at": "2026-09-01 10:30:00", "student_name": "梁皓文", "class_name": "高二(3)班", "teacher_name": "郑老师", "office": "203办公室"}
+  },
+  "latest_manifest": {
+    "schema": {
+      "type": "object", "required": ["version", "notes", "asset", "sha256", "size"],
+      "properties": {
+        "version": {"type": "string"},
+        "notes": {"type": "string"},
+        "asset": {"type": "string"},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "size": {"type": "integer", "minimum": 0}
+      }
+    },
+    "example": {"version": "0.2.0", "notes": "修复显示端重连", "asset": "call-center-0.2.0-x64.exe", "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "size": 12345678}
+  },
+  "ws_client_messages": {
+    "schema": {
+      "type": "object", "required": ["type"],
+      "properties": {
+        "type": {"const": "subscribe"},
+        "class_id": {"type": "integer"}
+      }
+    },
+    "example": {"type": "subscribe", "class_id": 3}
+  },
+  "ws_server_call": {
+    "schema": {
+      "type": "object", "required": ["type", "call"],
+      "properties": {"type": {"const": "call"}, "call": {"$ref": "#/schemas/call/schema"}}
+    },
+    "example": {"type": "call", "call": {"id": 1, "student_id": 3, "class_id": 2, "teacher_id": 1, "message": "", "announce": "请梁皓文同学到郑老师203办公室", "created_at": "2026-09-01 10:30:00", "student_name": "梁皓文", "class_name": "高二(3)班", "teacher_name": "郑老师", "office": "203办公室"}}
+  },
+  "ws_server_retract": {
+    "schema": {
+      "type": "object", "required": ["type", "call_id"],
+      "properties": {"type": {"const": "retract"}, "call_id": {"type": "integer"}}
+    },
+    "example": {"type": "retract", "call_id": 1}
+  }
+}
