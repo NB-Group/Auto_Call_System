@@ -21,18 +21,22 @@ def free_port() -> int:
     return port
 
 
-def serve(manifest: dict, exe: bytes = EXE, tamper: bool = False):
+def serve(manifest: dict, exe: bytes = EXE, tamper: bool = False,
+          raw_latest=None):
     """起一个本地 HTTP'镜像',返回 (url_prefix, runner, thread)。
 
     契约 URL 模板把绝对 GitHub URL 拼在镜像前缀之后
     (`{mirror}https://github.com/<repo>/...`),真实镜像站按整段路径代理;
     本地桩须同时注册裸路径(供直连测试 monkeypatch _manifest_url)与
     完整契约路径(供走真实 _manifest_url/_asset_url 的用例)。
+    raw_latest 非 None 时 /latest.json 直接返回该对象(如 JSON 数组,模拟代理异常页)。
     """
     loop = __import__("asyncio").new_event_loop()
     app = web.Application()
 
     async def latest(request):
+        if raw_latest is not None:
+            return web.json_response(raw_latest)
         m = dict(manifest)
         if tamper:
             m["sha256"] = "f" * 64
@@ -156,3 +160,51 @@ def test_install_pending_swaps_exe(tmp_path, monkeypatch):
     assert install_pending() is True
     assert exe.read_bytes() == b"new"
     assert (tmp_path / "app.old").read_bytes() == b"old"
+
+
+def test_manifest_non_dict_ignored(manifest):
+    """镜像返回 JSON 数组(代理异常页)不得让 fetch_manifests 抛 AttributeError。"""
+    good, rg, lg = serve(manifest)
+    bad, rb, lb = serve(manifest, raw_latest=[1, 2])  # 非字典清单
+    got = fetch_manifests("x/y", [good, bad], timeout=1.0)
+    stop(rg, lg); stop(rb, lb)
+    assert len(got) == 1
+    assert got[0][0] == good  # 只留下好的那个源
+
+
+def test_download_asset_traversal_sanitized(manifest, tmp_path, monkeypatch):
+    """manifest.asset 携带 ../ 逃逸时:只允许落在 UPDATE_DIR 内的净化文件名。"""
+    evil = dict(manifest, asset="../../evil.exe")  # 声明的资产名带逃逸
+    route = dict(manifest, asset="evil.exe")  # 镜像按净化后的名字供字节
+    a, ra, la = serve(route)
+    monkeypatch.chdir(tmp_path)
+    path = download_asset(evil, "x/y", [a], timeout=1.0)
+    stop(ra, la)
+    inside = tmp_path / "data" / "updates" / "evil.exe"
+    assert path is not None and path.read_bytes() == EXE
+    assert inside.read_bytes() == EXE
+    assert (tmp_path / "evil.exe").exists() is False  # ../../ 逃逸未得逞
+    # 全 tmp_path 内除 UPDATE_DIR 里那份,别无他物
+    assert sorted(str(p.relative_to(tmp_path)) for p in tmp_path.rglob("*")) == \
+        ["data", "data/updates", "data/updates/evil.exe"]
+
+
+def test_install_pending_rollback(tmp_path, monkeypatch):
+    """换新(pending → exe)失败时必须回滚:旧 exe 原样保住。"""
+    import shutil
+    monkeypatch.chdir(tmp_path)
+    exe = tmp_path / "app.exe"
+    exe.write_bytes(b"old")
+    pending_dir = tmp_path / "data" / "updates"
+    pending_dir.mkdir(parents=True)
+    (pending_dir / "pending.exe").write_bytes(b"new")
+    monkeypatch.setattr("sys.frozen", True, raising=False)
+    monkeypatch.setattr("sys.executable", str(exe))
+
+    def boom(src, dst):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(shutil, "move", boom)  # updater 内调用时查属性,同模块生效
+    assert install_pending() is False
+    assert exe.read_bytes() == b"old"  # 已回滚
+    assert not (tmp_path / "app.old").exists()  # .old 被 rename 回去,不留半态

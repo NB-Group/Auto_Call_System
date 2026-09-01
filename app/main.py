@@ -1,6 +1,8 @@
 """入口:角色解析 → 发现/启动服务器 → 打开 pywebview 窗口。"""
 import argparse
 import json
+import threading
+import time
 
 import webview
 
@@ -46,14 +48,11 @@ def main():
     tts = TTSService()
     bridge = Bridge(role, tts)
 
-    # 更新:先换上已暂存的新版(frozen 才生效),再为非服务器角色探新版。
-    # 服务器角色不自动更新(它是其他端的源头,由管理员手动控制)。
-    from app.updater import install_pending, stage_update, update_config
+    # 更新:先换上已暂存的新版(frozen 才生效,本地操作,快)。
+    # 新版探测+下载移入后台线程:镜像探测 3-4s 起步、下载更久,
+    # 不能挡在窗口创建前(否则老师/显示端每次启动都白等数秒)。
+    from app.updater import install_pending
     install_pending()
-    update_manifest = None
-    if role in ("teacher", "display"):
-        repo, mirrors = update_config()
-        update_manifest = stage_update(__version__, repo, mirrors)
 
     if role == "server":
         from server.serve import start_server
@@ -62,7 +61,11 @@ def main():
     else:
         url = resolve_server_url(args.server_url, args.dev)
         if url is None:
-            webview.create_window("叫号系统", _offline_html(), js_api=bridge)
+            window = webview.create_window("叫号系统", _offline_html(),
+                                           js_api=bridge)
+            if role in ("teacher", "display"):
+                threading.Thread(target=_stage_and_notify, args=(window,),
+                                 daemon=True).start()
             webview.start()
             return
         url = f"{url}/#/{role}"
@@ -70,17 +73,33 @@ def main():
     window = webview.create_window(
         f"叫号系统 v{__version__}", url, js_api=bridge,
         fullscreen=(role == "display"))
-    if update_manifest:
-        def notify():
-            detail = json.dumps(
-                {"version": update_manifest["version"],
-                 "notes": update_manifest["notes"]}, ensure_ascii=False)
-            window.evaluate_js(
-                "window.dispatchEvent(new CustomEvent('cc-update',"
-                f"{{detail:{detail}}}))")
-        window.events.loaded += notify
+    # 服务器角色不自动更新(它是其他端的源头,由管理员手动控制)。
+    if role in ("teacher", "display"):
+        threading.Thread(target=_stage_and_notify, args=(window,),
+                         daemon=True).start()
     webview.start()
     tts.stop()
+
+
+def _stage_and_notify(window) -> None:
+    """后台探测新版并下载暂存,成功后向前端派发 cc-update 事件。
+
+    pywebview evaluate_js 线程安全;窗口未加载完成时调用无害(吞错)。
+    """
+    try:
+        from app.updater import stage_update, update_config
+        repo, mirrors = update_config()
+        m = stage_update(__version__, repo, mirrors)
+        if not m:
+            return
+        time.sleep(5)  # 等待 UI ready(前端 App.vue 已挂载并注册 cc-update 监听)
+        detail = json.dumps({"version": m["version"], "notes": m["notes"]},
+                            ensure_ascii=False)
+        window.evaluate_js(
+            "window.dispatchEvent(new CustomEvent('cc-update',"
+            f"{{detail:{detail}}}))")
+    except Exception:
+        pass  # 更新是尽力而为:任何失败都不得影响主窗口
 
 
 def _pick_role_dialog():

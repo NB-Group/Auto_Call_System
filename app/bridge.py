@@ -35,7 +35,11 @@ class Bridge:
         if webview.windows:
             webview.windows[0].destroy()
 
-    def get_update_config(self) -> str:
+    def get_update_config(self) -> str | None:
+        # 角色门控:更新源配置只有服务器端可读写。老师/显示端页面走明文
+        # HTTP,LAN 内注入的 JS 不得借此投毒 repo/mirrors 绕过 sha256 quorum。
+        if self.role != "server":
+            return None
         from app.config import load_config
         cfg = load_config().get("update", {})
         return json.dumps({
@@ -44,6 +48,8 @@ class Bridge:
         }, ensure_ascii=False)
 
     def set_update_config(self, repo: str, mirrors_json: str) -> None:
+        if self.role != "server":
+            return None
         from app.config import load_config, save_config
         cfg = load_config()
         cfg["update"] = {"repo": repo,
