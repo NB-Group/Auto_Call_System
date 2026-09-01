@@ -191,7 +191,12 @@ def setup_business_routes(router: web.UrlDispatcher) -> None:
         return web.json_response({"ok": True})
 
     async def search_snippets_route(request):
-        limit = min(int(request.query.get("limit", 6)), 12)
+        # 与 students-search 同型(_int_or_none):非数字 → 400;
+        # 下界钳 1,防负数 LIMIT 的语义漂移(原 int() 非数字直接 500)
+        limit = _int_or_none(request.query.get("limit", 6))
+        if limit is None:
+            return _json_error("bad_request", 400)
+        limit = max(1, min(limit, 12))
         return web.json_response(search_snippets(
             request.app["db"], request["teacher"]["id"],
             request.query.get("q", ""), limit))

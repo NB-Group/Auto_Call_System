@@ -137,6 +137,17 @@ async def test_undo_non_integer_id_400(client):
     assert await r.json() == {"error": "bad_request"}
 
 
+async def test_snippet_search_limit_hardening(client):
+    """limit 非数字 → 400 bad_request(原 int() 直接 500);负数钳 1 不崩溃。"""
+    headers = await auth(client)
+    r = await client.get("/api/snippets/search?q=&limit=abc", headers=headers)
+    assert r.status == 400
+    assert await r.json() == {"error": "bad_request"}
+    r = await client.get("/api/snippets/search?q=&limit=-5", headers=headers)
+    assert r.status == 200
+    assert len(await r.json()) <= 6
+
+
 async def test_admin_undo_bypasses_window(client):
     """admin 撤销绕过 60s 窗口与归属检查(controllers 裁定)。"""
     headers = await auth(client)
