@@ -230,9 +230,10 @@ def _setup_admin_routes(router):
         if (r := admin_guard(request)):
             return r
         date = request.query.get("date")
-        where = f"date(c.created_at)='{date}'" if date else "1=1"
         rows = request.app["db"].execute(
-            f"SELECT id FROM calls c WHERE {where} ORDER BY id DESC").fetchall()
+            "SELECT id FROM calls c "
+            "WHERE (? IS NULL OR date(c.created_at)=?) ORDER BY id DESC",
+            (date, date)).fetchall()
         from server.api import call_row
         return web.json_response(
             {"calls": [call_row(request.app["db"], r["id"]) for r in rows]})

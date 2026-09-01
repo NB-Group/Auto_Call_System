@@ -25,6 +25,7 @@ def start_server(host="0.0.0.0", port=DEFAULT_PORT, db_path="data/call.db",
 
     def run():
         asyncio.set_event_loop(loop)
+        runner = None
         try:
             from server.app import create_app
             app = create_app(db_path, static_dir)
@@ -33,6 +34,11 @@ def start_server(host="0.0.0.0", port=DEFAULT_PORT, db_path="data/call.db",
             site = web.TCPSite(runner, host, port)
             loop.run_until_complete(site.start())
         except Exception as exc:  # 启动失败回传主线程
+            if runner is not None:  # setup 已成功而 site.start 失败:回收 runner
+                try:
+                    loop.run_until_complete(runner.cleanup())
+                except Exception:
+                    pass
             box["error"] = exc
         else:
             box["runner"] = runner
@@ -56,6 +62,9 @@ def stop_server(runner, loop):
 
     仅 loop.stop() 不关监听 socket,端口保持占用,同进程内无法重绑
     (实证:第二次 start_server 同端口 EADDRINUSE)。
+
+    幂等:重复调用安全。loop 已停(如双停)时仍尝试 cleanup 释放端口;
+    loop 已关闭则 run_coroutine_threadsafe 抛 RuntimeError,忽略。
     """
     async def _shutdown():
         await runner.cleanup()
@@ -63,6 +72,11 @@ def stop_server(runner, loop):
 
     if loop.is_running():
         loop.call_soon_threadsafe(lambda: asyncio.ensure_future(_shutdown()))
+    else:
+        try:
+            asyncio.run_coroutine_threadsafe(runner.cleanup(), loop)
+        except RuntimeError:  # loop 已关闭,无可清理
+            pass
 
 
 if __name__ == "__main__":

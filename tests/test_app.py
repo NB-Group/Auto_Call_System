@@ -79,6 +79,32 @@ async def test_admin_flow(client):
     assert (await r.json())["displays"] == 0
 
 
+async def test_history_injection_is_parameterized(client):
+    token = create_session(client.db, 1)
+    h = {"Authorization": f"Bearer {token}"}
+    db = client.db
+    db.execute("INSERT INTO classes(name) VALUES ('高二(1)班')")
+    db.execute("INSERT INTO students(class_id,name) VALUES (1,'测试学生')")
+    for day in ("2026-08-30", "2026-08-31"):  # 两条不同回溯日期的呼叫
+        db.execute(
+            "INSERT INTO calls(student_id,class_id,teacher_id,created_at) "
+            "VALUES (1,1,1,?)", (f"{day} 09:00:00",))
+    db.commit()
+
+    r = await client.get("/api/admin/calls", params={"date": "2026-08-31"},
+                         headers=h)
+    assert r.status == 200
+    assert len((await r.json())["calls"]) == 1
+
+    # 注入串按普通参数绑定 → 匹配不到任何日期 → 空表。
+    # f-string 版会拼成 WHERE date(c.created_at)='' OR '1'='1' 返回全部行,
+    # 此断言在未参数化版本上必失败。
+    r = await client.get("/api/admin/calls", params={"date": "' OR '1'='1"},
+                         headers=h)
+    assert r.status == 200
+    assert (await r.json())["calls"] == []
+
+
 async def test_teacher_cannot_admin(client):
     token = create_session(client.db, 1)  # admin 自己
     client.db.execute(
