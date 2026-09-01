@@ -118,3 +118,40 @@ async def test_call_response_matches_contract_schema(client):
     r = await client.post("/api/calls", json={"student_id": 1},
                           headers=await auth(client))
     jsonschema.validate((await r.json())["call"], schemas["call"]["schema"])
+
+
+async def test_add_snippet_returns_full_list(client):
+    """契约:POST /api/snippets → 201 增后全表(形状同 GET /api/snippets)。"""
+    r = await client.post("/api/snippets", json={"text": "带上圆规"},
+                          headers=await auth(client))
+    assert r.status == 201
+    rows = await r.json()
+    assert isinstance(rows, list)
+    assert {row["text"] for row in rows} == {"订正数学作业", "带上圆规"}
+    assert all({"id", "text", "use_count"} <= row.keys() for row in rows)
+
+
+async def test_undo_non_integer_id_400(client):
+    r = await client.delete("/api/calls/abc", headers=await auth(client))
+    assert r.status == 400
+    assert await r.json() == {"error": "bad_request"}
+
+
+async def test_admin_undo_bypasses_window(client):
+    """admin 撤销绕过 60s 窗口与归属检查(controllers 裁定)。"""
+    headers = await auth(client)
+    cid = (await (await client.post("/api/calls", json={"student_id": 1},
+                                    headers=headers)).json())["call"]["id"]
+    conn2 = connect(client.db.execute(
+        "PRAGMA database_list").fetchone()[2])
+    conn2.execute("UPDATE calls SET created_at=datetime('now','localtime','-120 seconds') "
+                  "WHERE id=?", (cid,))
+    conn2.commit(); conn2.close()
+    client.db.execute(
+        "INSERT INTO teachers(username,password_hash,display_name,office,role) "
+        "VALUES ('boss',?, '王校长','101办公室','admin')", (hash_password("pw"),))
+    client.db.commit()
+    admin_headers = {"Authorization": f"Bearer {create_session(client.db, 2)}"}
+    r = await client.delete(f"/api/calls/{cid}", headers=admin_headers)
+    assert r.status == 200
+    assert await r.json() == {"ok": True}

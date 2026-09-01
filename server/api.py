@@ -12,6 +12,13 @@ def _json_error(code: str, status: int) -> web.Response:
     return web.json_response({"error": code}, status=status)
 
 
+def _int_or_none(raw) -> int | None:
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return None
+
+
 def render_template(template: str, student: str, teacher: str, office: str) -> str:
     return (template.replace("{student}", student)
             .replace("{teacher}", teacher)
@@ -41,6 +48,14 @@ def call_row(conn, call_id: int) -> dict | None:
 
 def _today_where() -> str:
     return "date(c.created_at)=date('now','localtime')"
+
+
+def snippet_rows(conn, teacher_id: int) -> list[dict]:
+    rows = conn.execute(
+        "SELECT id,text,use_count FROM snippets WHERE teacher_id=? "
+        "ORDER BY use_count DESC, id DESC",
+        (teacher_id,)).fetchall()
+    return [dict(r) for r in rows]
 
 
 def setup_business_routes(router: web.UrlDispatcher) -> None:
@@ -76,9 +91,11 @@ def setup_business_routes(router: web.UrlDispatcher) -> None:
 
     async def search(request):
         q = request.query.get("q", "")
-        limit = min(int(request.query.get("limit", 8)), 20)
+        limit = _int_or_none(request.query.get("limit", 8))
+        if limit is None:
+            return _json_error("bad_request", 400)
         return web.json_response(
-            search_students(request.app["db"], q, limit))
+            search_students(request.app["db"], q, min(limit, 20)))
 
     async def create_call(request):
         t, db = request["teacher"], request.app["db"]
@@ -119,15 +136,18 @@ def setup_business_routes(router: web.UrlDispatcher) -> None:
 
     async def undo_call(request):
         t, db = request["teacher"], request.app["db"]
-        row = db.execute("SELECT * FROM calls WHERE id=?",
-                         (int(request.match_info["id"]),)).fetchone()
+        cid = _int_or_none(request.match_info["id"])
+        if cid is None:
+            return _json_error("bad_request", 400)
+        row = db.execute("SELECT * FROM calls WHERE id=?", (cid,)).fetchone()
         if row is None:
             return _json_error("not_found", 404)
-        if t["role"] != "admin" and row["teacher_id"] != t["id"]:
-            return _json_error("forbidden", 403)
-        created = datetime.strptime(row["created_at"], "%Y-%m-%d %H:%M:%S")
-        if datetime.now() - created > RETRACT_WINDOW:
-            return _json_error("gone", 410)
+        if t["role"] != "admin":
+            if row["teacher_id"] != t["id"]:
+                return _json_error("forbidden", 403)
+            created = datetime.strptime(row["created_at"], "%Y-%m-%d %H:%M:%S")
+            if datetime.now() - created > RETRACT_WINDOW:
+                return _json_error("gone", 410)
         db.execute("UPDATE calls SET retracted_at=datetime('now','localtime') "
                    "WHERE id=?", (row["id"],))
         db.commit()
@@ -145,11 +165,8 @@ def setup_business_routes(router: web.UrlDispatcher) -> None:
             {"calls": [call_row(db, r["id"]) for r in rows]})
 
     async def list_snippets(request):
-        rows = request.app["db"].execute(
-            "SELECT id,text,use_count FROM snippets WHERE teacher_id=? "
-            "ORDER BY use_count DESC, id DESC",
-            (request["teacher"]["id"],)).fetchall()
-        return web.json_response([dict(r) for r in rows])
+        return web.json_response(
+            snippet_rows(request.app["db"], request["teacher"]["id"]))
 
     async def add_snippet(request):
         text = (await request.json()).get("text", "").strip()
@@ -159,12 +176,17 @@ def setup_business_routes(router: web.UrlDispatcher) -> None:
         db.execute("INSERT INTO snippets(teacher_id,text) VALUES (?,?)",
                    (request["teacher"]["id"], text))
         db.commit()
-        return web.json_response({"ok": True}, status=201)
+        # 契约:POST /api/snippets → 201 增后全表(同 GET /api/snippets)
+        return web.json_response(
+            snippet_rows(db, request["teacher"]["id"]), status=201)
 
     async def del_snippet(request):
+        sid = _int_or_none(request.match_info["id"])
+        if sid is None:
+            return _json_error("bad_request", 400)
         request.app["db"].execute(
             "DELETE FROM snippets WHERE id=? AND teacher_id=?",
-            (int(request.match_info["id"]), request["teacher"]["id"]))
+            (sid, request["teacher"]["id"]))
         request.app["db"].commit()
         return web.json_response({"ok": True})
 
