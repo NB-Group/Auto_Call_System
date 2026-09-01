@@ -86,3 +86,11 @@ message = 选中短语文本以 ``,` 连接 +(`,`+free_text,若有);announce = d
 ## v1.1 增补(2026-09-01)
 GET /api/snippets/search?q=&limit=6(教师)
 匹配:短语拼音首字母前缀 > 短语文本子串;→ [{"id","text","use_count"}](use_count 降序)
+
+## v1.2 增补(2026-09-01)
+bridge 新增:
+- get_update_config() -> {"repo": str, "mirrors": [str, ...]}
+- set_update_config(repo: str, mirrors_json: str) -> null   # mirrors_json 为 JSON 数组文本
+壳 → 前端事件(经 evaluate_js 派发到 window):
+- CustomEvent 'cc-update',detail = {"version": "...", "notes": "..."}
+  (新版已下载暂存、重启生效;前端据此显示横幅,按钮调 api.quit() 重启)

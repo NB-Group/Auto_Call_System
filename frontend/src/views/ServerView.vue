@@ -7,6 +7,8 @@ import { useToast } from '../composables/useToast'
 const needsAdmin = ref<boolean | null>(null)
 const info = ref<{ version: string; displays: number } | null>(null)
 const username = ref(''); const password = ref('')
+const repo = ref('NB-Group/Auto_Call_System')
+const mirrorsText = ref('')
 const { push } = useToast()
 
 async function refresh() {
@@ -18,7 +20,23 @@ async function refresh() {
     try { info.value = await api.admin.serverInfo() } catch { info.value = null }
   }
 }
-onMounted(refresh)
+onMounted(async () => {
+  await refresh()
+  // 浏览器开发模式下 pywebview 未注入,可选链直接跳过
+  const cfg = await (window as any).pywebview?.api?.get_update_config?.()
+  if (cfg) {
+    const c = JSON.parse(cfg)
+    repo.value = c.repo
+    mirrorsText.value = (c.mirrors as string[]).join('\n')
+  }
+})
+
+async function saveUpdateCfg() {
+  const mirrors = mirrorsText.value.split('\n').map(s => s.trim()).filter(Boolean)
+  await (window as any).pywebview?.api?.set_update_config?.(
+    repo.value.trim(), JSON.stringify(mirrors))
+  push('更新设置已保存')
+}
 
 async function createAdmin() {
   try {
@@ -51,6 +69,18 @@ async function createAdmin() {
       <a href="#/login" class="cc-btn cc-btn-primary" style="text-decoration:none; text-align:center">
         进入管理后台
       </a>
+    </div>
+    <div v-if="needsAdmin === false" class="glass-card" p-8 mt-4 flex="~ col gap-3">
+      <h2 text-16px font-600 m-0>更新设置</h2>
+      <label flex="~ col gap-1" text-13px>
+        GitHub 仓库(owner/name)
+        <input v-model="repo" class="cc-input" placeholder="NB-Group/Auto_Call_System">
+      </label>
+      <label flex="~ col gap-1" text-13px>
+        镜像源前缀(每行一个,留空行 = 直连)
+        <textarea v-model="mirrorsText" class="cc-input" rows-4 />
+      </label>
+      <button class="cc-btn cc-btn-primary" @click="saveUpdateCfg">保存</button>
     </div>
     <Toasts />
   </div>

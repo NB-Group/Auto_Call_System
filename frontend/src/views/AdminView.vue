@@ -18,7 +18,9 @@ const newTeacher = ref({ ...nt })
 const newClass = ref('')
 const importText = ref('')
 const importTarget = ref<number | null>(null)
-const historyDate = ref(new Date().toISOString().slice(0, 10))
+// 本地日期而非 toISOString(UTC):早 8 点前 UTC 仍是昨天,学校恰在早晨查历史
+const _d = new Date()
+const historyDate = ref(`${_d.getFullYear()}-${String(_d.getMonth() + 1).padStart(2, '0')}-${String(_d.getDate()).padStart(2, '0')}`)
 
 async function refresh() {
   if (tab.value === 'teachers') teachers.value = await api.admin.teachers() as any

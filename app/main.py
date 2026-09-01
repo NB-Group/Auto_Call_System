@@ -1,5 +1,6 @@
 """入口:角色解析 → 发现/启动服务器 → 打开 pywebview 窗口。"""
 import argparse
+import json
 
 import webview
 
@@ -45,6 +46,15 @@ def main():
     tts = TTSService()
     bridge = Bridge(role, tts)
 
+    # 更新:先换上已暂存的新版(frozen 才生效),再为非服务器角色探新版。
+    # 服务器角色不自动更新(它是其他端的源头,由管理员手动控制)。
+    from app.updater import install_pending, stage_update, update_config
+    install_pending()
+    update_manifest = None
+    if role in ("teacher", "display"):
+        repo, mirrors = update_config()
+        update_manifest = stage_update(__version__, repo, mirrors)
+
     if role == "server":
         from server.serve import start_server
         start_server(static_dir=None)
@@ -60,6 +70,15 @@ def main():
     window = webview.create_window(
         f"叫号系统 v{__version__}", url, js_api=bridge,
         fullscreen=(role == "display"))
+    if update_manifest:
+        def notify():
+            detail = json.dumps(
+                {"version": update_manifest["version"],
+                 "notes": update_manifest["notes"]}, ensure_ascii=False)
+            window.evaluate_js(
+                "window.dispatchEvent(new CustomEvent('cc-update',"
+                f"{{detail:{detail}}}))")
+        window.events.loaded += notify
     webview.start()
     tts.stop()
 

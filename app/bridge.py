@@ -3,7 +3,10 @@
 `import webview` 放在方法内而非模块顶:无显示/无 GTK 的环境(测试、CI)
 可纯构造 Bridge,只有真正动窗口(fullscreen/quit)才触碰 webview。
 """
+import json
+
 from app import __version__
+from app.updater import DEFAULT_MIRRORS
 
 
 class Bridge:
@@ -31,3 +34,18 @@ class Bridge:
 
         if webview.windows:
             webview.windows[0].destroy()
+
+    def get_update_config(self) -> str:
+        from app.config import load_config
+        cfg = load_config().get("update", {})
+        return json.dumps({
+            "repo": cfg.get("repo", "NB-Group/Auto_Call_System"),
+            "mirrors": cfg.get("mirrors") or DEFAULT_MIRRORS,
+        }, ensure_ascii=False)
+
+    def set_update_config(self, repo: str, mirrors_json: str) -> None:
+        from app.config import load_config, save_config
+        cfg = load_config()
+        cfg["update"] = {"repo": repo,
+                         "mirrors": json.loads(mirrors_json)}
+        save_config(cfg)
