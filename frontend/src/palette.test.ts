@@ -66,4 +66,14 @@ describe('palette 状态机', () => {
       { t: 'enter', students: [], snippets: [SN] })
     expect(effect).toEqual({ kind: 'send', student: S, snippetIds: [], freeText: '' })
   })
+
+  it('set 事件绝对覆盖 query(IME compositionend/@input 用),非追加', () => {
+    let st: PaletteState = reduce(initial, { t: 'set', query: 'abc' }).state
+    expect(st.query).toBe('abc')
+    st = reduce(st, { t: 'set', query: 'xy' }).state
+    expect(st.query).toBe('xy')
+    // set 同时重置高亮,且不触发发送
+    st = reduce({ ...st, activeIndex: 3 }, { t: 'set', query: 'xy' }).state
+    expect(st.activeIndex).toBe(0)
+  })
 })

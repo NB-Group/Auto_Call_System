@@ -58,6 +58,9 @@ function pick(i: number) {
 }
 
 function onKeydown(ev: KeyboardEvent) {
+  // IME 组合期(Windows 中文输入法:isComposing / Process / keyCode 229)
+  // 一律放行给输入法 —— 此时 Enter/方向键/Backspace 都属于选字操作,不是控制键。
+  if (ev.isComposing || ev.keyCode === 229) return
   if (ev.key === 'ArrowDown') { dispatch({ t: 'down' }); ev.preventDefault() }
   else if (ev.key === 'ArrowUp') { dispatch({ t: 'up' }); ev.preventDefault() }
   else if (ev.key === 'Enter') {
@@ -67,7 +70,18 @@ function onKeydown(ev: KeyboardEvent) {
   else if (ev.key === 'Tab') { dispatch({ t: 'tab' }); ev.preventDefault() }
   else if (ev.key === 'Escape') dispatch({ t: 'esc' })
   else if (ev.key === 'Backspace') dispatch({ t: 'backspace' })
-  else if (ev.key.length === 1 && !ev.ctrlKey && !ev.metaKey) dispatch({ t: 'type', ch: ev.key })
+}
+
+// 文本输入走 input 事件而非 keydown(keydown 在 IME 下拿不到拼音串)。
+const composing = ref(false)
+function onCompositionStart() { composing.value = true }
+function onCompositionEnd(ev: CompositionEvent) {
+  composing.value = false
+  dispatch({ t: 'set', query: (ev.target as HTMLInputElement).value })
+}
+function onInput(ev: Event) {
+  if (composing.value) return
+  dispatch({ t: 'set', query: (ev.target as HTMLInputElement).value })
 }
 
 watch(() => state.value.activeIndex, () => {
@@ -95,7 +109,8 @@ const PLACEHOLDER = computed(() =>
 
     <input ref="inputEl" :value="state.query" class="cc-input w-full text-17px"
            :placeholder="PLACEHOLDER" mb-2 autocomplete="off" spellcheck="false"
-           @keydown="onKeydown">
+           @keydown="onKeydown" @input="onInput"
+           @compositionstart="onCompositionStart" @compositionend="onCompositionEnd">
 
     <div ref="listEl" max-h-320px overflow-auto flex="~ col gap-1">
       <div v-for="(r, i) in results" :key="r.key"

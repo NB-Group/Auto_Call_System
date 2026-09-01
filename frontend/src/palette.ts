@@ -19,6 +19,7 @@ export type SendEffect = {
 
 export type PaletteEvent =
   | { t: 'type'; ch: string }
+  | { t: 'set'; query: string }
   | { t: 'backspace' }
   | { t: 'up' }
   | { t: 'down' }
@@ -39,6 +40,9 @@ export function reduce(
   switch (e.t) {
     case 'type':
       return { state: { ...s, query: s.query + e.ch, activeIndex: 0 }, effect: null }
+    // IME/输入框绝对设置:输入法 compositionend 或 @input 直接以输入框当前值覆盖 query
+    case 'set':
+      return { state: { ...s, query: e.query, activeIndex: 0 }, effect: null }
     case 'backspace':
       if (s.query) return { state: { ...s, query: s.query.slice(0, -1) }, effect: null }
       if (s.phase === 'compose') {

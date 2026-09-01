@@ -25,6 +25,8 @@ async function logout() {
     <button class="cc-btn" title="切换主题" @click="toggleDark">
       {{ isDark ? '☀️' : '🌙' }}
     </button>
+    <router-link to="/snippets" class="cc-btn" style="text-decoration:none">短语</router-link>
+    <router-link to="/profile" class="cc-btn" style="text-decoration:none">资料</router-link>
     <button class="cc-btn" @click="logout">退出</button>
   </header>
 </template>

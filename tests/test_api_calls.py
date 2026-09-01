@@ -180,7 +180,8 @@ async def test_today_lists_own_calls_desc(client):
     assert r.status == 200
     calls = (await r.json())["calls"]
     assert [c["id"] for c in calls] == [c2, c1]
-    assert await client.delete(f"/api/calls/{c2}", headers=headers)
+    r2 = await client.delete(f"/api/calls/{c2}", headers=headers)
+    assert r2.status == 200
     calls = (await (await client.get("/api/calls/today",
                                      headers=headers)).json())["calls"]
     assert len(calls) == 2
