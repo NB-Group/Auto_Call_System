@@ -82,3 +82,7 @@ message = 选中短语文本以 ``,` 连接 +(`,`+free_text,若有);announce = d
 - 清单 URL 模板:`{mirror}https://github.com/<repo>/releases/latest/download/latest.json`
 - 镜像前缀列表(可配置):`""`(直连)、`https://gh-proxy.org/`、`https://ghfast.top/`、`https://ghproxy.net/`、`https://ghproxy.homeboyc.cn/`、`https://gh.zwy.one/`
 - 防投毒:清单须从 ≥2 个源取得且 sha256 一致才下载;下载后文件 sha256 再验一次
+
+## v1.1 增补(2026-09-01)
+GET /api/snippets/search?q=&limit=6(教师)
+匹配:短语拼音首字母前缀 > 短语文本子串;→ [{"id","text","use_count"}](use_count 降序)

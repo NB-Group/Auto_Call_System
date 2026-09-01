@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 
 from aiohttp import web
 
-from server.search import search_students
+from server.search import search_students, search_snippets
 
 RETRACT_WINDOW = timedelta(seconds=60)
 
@@ -190,10 +190,17 @@ def setup_business_routes(router: web.UrlDispatcher) -> None:
         request.app["db"].commit()
         return web.json_response({"ok": True})
 
+    async def search_snippets_route(request):
+        limit = min(int(request.query.get("limit", 6)), 12)
+        return web.json_response(search_snippets(
+            request.app["db"], request["teacher"]["id"],
+            request.query.get("q", ""), limit))
+
     router.add_get("/api/me", me)
     router.add_put("/api/me", update_me)
     router.add_post("/api/auth/logout", logout)
     router.add_get("/api/students/search", search)
+    router.add_get("/api/snippets/search", search_snippets_route)
     router.add_post("/api/calls", create_call)
     router.add_delete("/api/calls/{id}", undo_call)
     router.add_get("/api/calls/today", today)

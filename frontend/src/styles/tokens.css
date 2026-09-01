@@ -1,0 +1,132 @@
+/* 设计 token:Bewly 系 DNA(GulyGuly 移植)。只用变量,不写死色值。 */
+:root {
+  --cc-radius: 12px;
+  --cc-radius-half: calc(var(--cc-radius) / 2);
+  --cc-top-bar-height: 64px;
+
+  --cc-glass-1: blur(24px) saturate(180%) brightness(1.04);
+  --cc-glass-2: blur(36px) saturate(190%) brightness(1.05);
+
+  --cc-shadow-1: 0 4px 6px -1px rgb(0 0 0 / 0.08), 0 2px 4px -2px rgb(0 0 0 / 0.04);
+  --cc-shadow-2: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.06);
+  --cc-shadow-3: 0 20px 25px -5px rgb(0 0 0 / 0.12), 0 8px 10px -6px rgb(0 0 0 / 0.08);
+  --cc-edge-glow: inset 1px 1px 1px -0.5px rgba(255 255 255 / 0.34),
+    inset -1px -1px 1px -0.5px rgba(255 255 255 / 0.14),
+    inset 0 0 10px rgba(255 255 255 / 0.6);
+
+  --cc-dur-fast: 180ms;
+  --cc-dur-cozy: 330ms;
+  --cc-dur-slow: 550ms;
+  --cc-ease-smooth: cubic-bezier(0.22, 1, 0.36, 1);
+  --cc-ease-overshoot: cubic-bezier(0.34, 2, 0.6, 1);
+
+  --cc-theme: hsl(195 100% 42%);
+  --cc-theme-10: color-mix(in oklab, var(--cc-theme), transparent 90%);
+  --cc-theme-20: color-mix(in oklab, var(--cc-theme), transparent 80%);
+  --cc-theme-40: color-mix(in oklab, var(--cc-theme), transparent 60%);
+  --cc-theme-80: color-mix(in oklab, var(--cc-theme), transparent 20%);
+
+  --cc-text-1: hsl(217 19% 10%);
+  --cc-text-2: hsl(215 19% 22% / 92%);
+  --cc-text-3: hsl(215 19% 25% / 82%);
+  --cc-text-4: hsl(215 19% 36% / 40%);
+
+  --cc-bg-grad: linear-gradient(180deg, hsl(240 31% 96%) 0%, hsl(0 0% 100%) 100%);
+  --cc-content: hsl(0 0% 100% / 0.62);
+  --cc-content-solid: hsl(0 0% 100%);
+  --cc-fill-1: rgb(131 131 145 / 15%);
+  --cc-fill-2: rgb(131 131 145 / 30%);
+  --cc-border: rgb(131 131 145 / 18%);
+}
+
+:root.dark {
+  --cc-shadow-1: 0 4px 6px -1px rgb(0 0 0 / 0.18), 0 2px 4px -2px rgb(0 0 0 / 0.14);
+  --cc-shadow-2: 0 10px 15px -3px rgb(0 0 0 / 0.2), 0 4px 6px -4px rgb(0 0 0 / 0.16);
+  --cc-shadow-3: 0 20px 25px -5px rgb(0 0 0 / 0.22), 0 8px 10px -6px rgb(0 0 0 / 0.18);
+  --cc-edge-glow: inset 1px 1px 1px -0.5px rgba(255 255 255 / 0.18),
+    inset -1px -1px 1px -0.5px rgba(255 255 255 / 0.06),
+    inset 0 0 10px rgba(255 255 255 / 0.06);
+
+  --cc-text-1: hsl(215 19% 98%);
+  --cc-text-2: hsl(215 19% 92% / 92%);
+  --cc-text-3: hsl(215 19% 85% / 82%);
+  --cc-text-4: hsl(215 19% 74% / 40%);
+
+  --cc-bg-grad: linear-gradient(180deg, hsl(230 12% 8%) 0%, hsl(230 12% 4%) 100%);
+  --cc-content: hsl(230 12% 10% / 0.62);
+  --cc-content-solid: hsl(230 12% 10%);
+  --cc-fill-1: rgb(131 131 145 / 15%);
+  --cc-fill-2: rgb(131 131 145 / 30%);
+  --cc-border: rgb(131 131 145 / 26%);
+}
+
+html, body, #app { height: 100%; margin: 0; }
+body {
+  font-family: 'Segoe UI', 'MiSans', 'PingFang SC', 'Noto Sans CJK SC',
+    'Microsoft YaHei UI', sans-serif;
+  color: var(--cc-text-1);
+  background: var(--cc-bg-grad);
+  background-attachment: fixed;
+}
+
+/* 工具类(Uno 管布局,这里管玻璃质感) */
+.glass-card {
+  background: var(--cc-content);
+  backdrop-filter: var(--cc-glass-1);
+  -webkit-backdrop-filter: var(--cc-glass-1);
+  border: 1px solid var(--cc-border);
+  border-radius: var(--cc-radius);
+  box-shadow: var(--cc-shadow-1), var(--cc-edge-glow);
+}
+.glass-pop {
+  background: color-mix(in oklab, var(--cc-content-solid), transparent 12%);
+  backdrop-filter: var(--cc-glass-2);
+  -webkit-backdrop-filter: var(--cc-glass-2);
+  border: 1px solid var(--cc-border);
+  border-radius: var(--cc-radius);
+  box-shadow: var(--cc-shadow-3), var(--cc-edge-glow);
+}
+.cc-btn {
+  border: 1px solid var(--cc-border);
+  border-radius: var(--cc-radius-half);
+  background: var(--cc-fill-1);
+  color: var(--cc-text-1);
+  padding: 6px 14px;
+  cursor: pointer;
+  transition: all var(--cc-dur-fast) var(--cc-ease-smooth);
+}
+.cc-btn:hover { background: var(--cc-fill-2); transform: translateY(-1px); }
+.cc-btn:active { transform: translateY(0) scale(0.97); }
+.cc-btn-primary {
+  background: var(--cc-theme); color: #fff; border-color: transparent;
+  box-shadow: 0 4px 16px var(--cc-theme-40);
+}
+.cc-input {
+  border: 1px solid var(--cc-border);
+  border-radius: var(--cc-radius-half);
+  background: var(--cc-fill-1);
+  color: var(--cc-text-1);
+  padding: 8px 12px;
+  outline: none;
+  transition: border-color var(--cc-dur-fast) var(--cc-ease-smooth),
+    box-shadow var(--cc-dur-fast) var(--cc-ease-smooth);
+}
+.cc-input:focus { border-color: var(--cc-theme); box-shadow: 0 0 0 3px var(--cc-theme-20); }
+.cc-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: var(--cc-theme-10); color: var(--cc-theme);
+  border: 1px solid var(--cc-theme-20);
+  border-radius: 999px; padding: 2px 10px; font-size: 13px;
+}
+
+/* 主题切换圆形揭示:中和 WebView2 非整数 dpr 的重投影偏移 */
+::view-transition-old(root), ::view-transition-new(root) { animation: none; }
+::view-transition-group(root) {
+  transform: none !important; inset: 0; width: 100vw; height: 100vh;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --cc-dur-fast: 0ms; --cc-dur-cozy: 0ms; --cc-dur-slow: 0ms;
+  }
+}

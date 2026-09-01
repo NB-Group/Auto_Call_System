@@ -37,3 +37,25 @@ def search_students(conn, q: str, limit: int = 8) -> list[dict]:
     scored.sort(key=lambda t: (t[0], _name_key(t[1]["name"])))
     return [{k: r[k] for k in ("id", "name", "class_name", "pinyin_initials")}
             for _, r in scored[:limit]]
+
+
+def search_snippets(conn, teacher_id: int, q: str, limit: int = 6) -> list[dict]:
+    """短语搜索:拼音首字母前缀 > 文本子串,同级 use_count 降序(CONTRACTS v1.1)。"""
+    ql = q.strip().lower()
+    if not ql:
+        rows = conn.execute(
+            "SELECT id,text,use_count FROM snippets WHERE teacher_id=? "
+            "ORDER BY use_count DESC LIMIT ?", (teacher_id, limit)).fetchall()
+        return [dict(r) for r in rows]
+    rows = conn.execute(
+        "SELECT id,text,use_count FROM snippets WHERE teacher_id=? "
+        "ORDER BY use_count DESC", (teacher_id,)).fetchall()
+    scored = []
+    for r in rows:
+        ini = "".join(lazy_pinyin(r["text"], style=Style.FIRST_LETTER))
+        if ini.startswith(ql):
+            scored.append((0, -r["use_count"], r))
+        elif ql in r["text"].lower():
+            scored.append((1, -r["use_count"], r))
+    scored.sort(key=lambda t: (t[0], t[1]))
+    return [dict(r) for _, _, r in scored[:limit]]
