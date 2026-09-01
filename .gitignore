@@ -1,6 +1,10 @@
+.venv/
 __pycache__/
 *.pyc
 data/
+dist/
+server/static/
 frontend/node_modules/
 frontend/dist/
-server/static/
+*.old
+*.exe
