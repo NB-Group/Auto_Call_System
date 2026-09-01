@@ -94,8 +94,11 @@ def setup_business_routes(router: web.UrlDispatcher) -> None:
         limit = _int_or_none(request.query.get("limit", 8))
         if limit is None:
             return _json_error("bad_request", 400)
+        # 下界钳 1(与 snippets-search 对称):负数 limit 会让
+        # scored[:limit] 按负索引从尾部截断,语义漂移
+        limit = max(1, min(limit, 20))
         return web.json_response(
-            search_students(request.app["db"], q, min(limit, 20)))
+            search_students(request.app["db"], q, limit))
 
     async def create_call(request):
         t, db = request["teacher"], request.app["db"]

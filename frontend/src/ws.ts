@@ -14,8 +14,11 @@ export function connectWS(h: WSHandlers) {
   let closed = false
   let ws: WebSocket | null = null
   let delay = 1000
+  let timer: ReturnType<typeof setTimeout> | undefined
 
   function open() {
+    // close() 可能落在退避等待窗内:迟到的定时器不得在已关闭的句柄上重连
+    if (closed) return
     const t = token.get()
     const url = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws${t ? `?token=${t}` : ''}`
     ws = new WebSocket(url)
@@ -31,9 +34,15 @@ export function connectWS(h: WSHandlers) {
       else if (msg.type === 'call') h.onCall?.(msg.call as CallItem)
       else if (msg.type === 'retract') h.onRetract?.(msg.call_id)
     }
-    ws.onclose = () => {
+    ws.onclose = (ev) => {
       h.onStatus?.(false)
-      if (!closed) setTimeout(open, delay = Math.min(delay * 1.6, 10000))
+      // 契约:token 无效 → 服务端 close 4401,停止重试(重连也不会成功)
+      if (ev.code === 4401) {
+        closed = true
+        return
+      }
+      if (!closed)
+        timer = setTimeout(open, delay = Math.min(delay * 1.6, 10000))
     }
   }
   open()
@@ -44,6 +53,10 @@ export function connectWS(h: WSHandlers) {
       if (ws?.readyState === WebSocket.OPEN)
         ws.send(JSON.stringify({ type: 'subscribe', class_id: classId }))
     },
-    close() { closed = true; ws?.close() },
+    close() {
+      closed = true
+      clearTimeout(timer)
+      ws?.close()
+    },
   }
 }

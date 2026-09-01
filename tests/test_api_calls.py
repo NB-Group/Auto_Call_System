@@ -148,6 +148,25 @@ async def test_snippet_search_limit_hardening(client):
     assert len(await r.json()) <= 6
 
 
+async def test_negative_limit_clamped_to_one(client):
+    """负数 limit 下界钳 1(snippets/students 两路由对称),补行到 2 条使命中
+    可区分:snippets 不钳时 SQLite 负 LIMIT = 无上限(返回 2 行);students
+    不钳时 scored[:负数] 从尾部截断(2 行命中被切空返回 0 行)。"""
+    headers = await auth(client)
+    client.db.execute(
+        "INSERT INTO snippets(teacher_id,text) VALUES (1,'带上练习册')")
+    client.db.execute(
+        "INSERT INTO students(class_id,name,pinyin_full,pinyin_initials) "
+        "VALUES (1,'梁小明',?,?)", pinyin_of("梁小明"))
+    client.db.commit()
+    r = await client.get("/api/snippets/search?q=&limit=-5", headers=headers)
+    assert r.status == 200
+    assert len(await r.json()) == 1
+    r = await client.get("/api/students/search?q=l&limit=-5", headers=headers)
+    assert r.status == 200
+    assert len(await r.json()) == 1
+
+
 async def test_admin_undo_bypasses_window(client):
     """admin 撤销绕过 60s 窗口与归属检查(controllers 裁定)。"""
     headers = await auth(client)
