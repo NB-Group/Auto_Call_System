@@ -43,11 +43,14 @@ class SapiBackend:
         import win32com.client  # 惰性导入(Nuitka:--include-package=win32com)
         self.voice = win32com.client.Dispatch("SAPI.SpVoice")
         for v in self.voice.GetVoices():
-            name = v.GetAttribute("Name") if v.GetDescription() else ""
-            if any(k in name for k in ("Huihui", "Kangkang", "Yaoyao",
-                                       "Microsoft")):
-                self.voice.Voice = v
-                break
+            try:  # 单个语音 token 缺 Name 属性/COM 异常:跳过,不中断选择
+                name = v.GetAttribute("Name") if v.GetDescription() else ""
+                if any(k in name for k in ("Huihui", "Kangkang", "Yaoyao",
+                                           "Microsoft")):
+                    self.voice.Voice = v
+                    break
+            except Exception:
+                continue  # 无匹配或坏 token 则保留默认语音
         self.voice.Rate = -1  # 0.9× 语速
 
     @property
