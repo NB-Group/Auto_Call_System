@@ -4,20 +4,21 @@ import threading
 
 from aiohttp import web
 
+from server.broadcast import Broadcaster
+
 DEFAULT_PORT = 8800
 
 
 def start_server(host="0.0.0.0", port=DEFAULT_PORT, db_path="data/call.db",
                  static_dir=None):
-    """在后台线程跑 HTTP 服务,返回 (runner, thread, loop)。
+    """在后台线程跑 HTTP 服务,返回 (runner, thread, bcast, loop)。
 
     App(含 SQLite 连接)必须在线程内创建:sqlite3 默认
     check_same_thread=True,主线程建的连接被服务线程使用会
     ProgrammingError(所有请求 500)。Event 同步保证返回时端口已绑定,
     线程内启动失败(如端口占用)在主线程抛出。
 
-    UDP 广播(Broadcaster)由 Task 8 接入:文件顶部 import,本函数末尾
-    创建并 start(),返回值追加 bcast。
+    同时启动 UDP 广播(Broadcaster),供客户端 find_server() 零配置发现。
     """
     loop = asyncio.new_event_loop()
     ready = threading.Event()
@@ -54,11 +55,14 @@ def start_server(host="0.0.0.0", port=DEFAULT_PORT, db_path="data/call.db",
         raise box["error"]
     if "runner" not in box:
         raise TimeoutError("start_server: server thread not ready in 10s")
-    return box["runner"], t, loop
+    from app import __version__
+    bcast = Broadcaster(port, __version__)
+    bcast.start()
+    return box["runner"], t, bcast, loop
 
 
-def stop_server(runner, loop):
-    """停服:先 runner.cleanup() 释放端口,再停事件循环。
+def stop_server(runner, loop, bcast):
+    """停服:先停 UDP 广播,再 runner.cleanup() 释放端口,最后停事件循环。
 
     仅 loop.stop() 不关监听 socket,端口保持占用,同进程内无法重绑
     (实证:第二次 start_server 同端口 EADDRINUSE)。
@@ -66,6 +70,7 @@ def stop_server(runner, loop):
     幂等:重复调用安全。loop 已停(如双停)时仍尝试 cleanup 释放端口;
     loop 已关闭则 run_coroutine_threadsafe 抛 RuntimeError,忽略。
     """
+    bcast.stop()
     async def _shutdown():
         await runner.cleanup()
         loop.stop()
