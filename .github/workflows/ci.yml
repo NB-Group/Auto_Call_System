@@ -20,6 +20,7 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: "20" }
       - run: corepack enable
+      - run: corepack prepare pnpm@9.15.9 --activate
       - run: pnpm --dir frontend install
       - run: pnpm --dir frontend test
       - run: pnpm --dir frontend build
@@ -33,6 +34,7 @@ jobs:
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
       - run: corepack enable
+      - run: corepack prepare pnpm@9.15.9 --activate
       - run: pip install -r requirements.txt nuitka ordered-set
       - run: sudo apt-get update && sudo apt-get install -y ccache
       - run: python scripts/prepare_frontend.py

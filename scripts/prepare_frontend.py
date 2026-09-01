@@ -10,9 +10,10 @@ ROOT = Path(__file__).resolve().parent.parent
 def _run(cmd_name: str, *args: str, **kw) -> None:
     """Windows 下 corepack/pnpm 是 .cmd shim,CreateProcess 无法直接解析,
     统一用 shutil.which 解析出完整可执行路径再调用。"""
+    optional = kw.pop("optional", False)
     exe = shutil.which(cmd_name)
     if exe is None:
-        if kw.pop("optional", False):
+        if optional:
             return
         raise SystemExit(f"未找到 {cmd_name},请先安装/启用")
     subprocess.run([exe, *args], **kw)
