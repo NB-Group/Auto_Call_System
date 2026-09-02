@@ -62,7 +62,8 @@ def main():
             start_server(static_dir=None)
         except Exception as e:  # 端口占用等:弹窗报错,不静默退(I6)
             webview.create_window("服务器启动失败", html=_error_html(str(e)),
-                                  js_api=bridge)
+                                  js_api=bridge, frameless=True,
+                                  easy_drag=False)
             _start_gui()
             return
         url = "http://127.0.0.1:8800/#/server"
@@ -70,7 +71,8 @@ def main():
         url = resolve_server_url(args.server_url, args.dev)
         if url is None:
             window = webview.create_window("叫号系统", _offline_html(),
-                                           js_api=bridge)
+                                           js_api=bridge, frameless=True,
+                                           easy_drag=False)
             if role in ("teacher", "display"):
                 threading.Thread(target=_stage_and_notify, args=(window,),
                                  daemon=True).start()
@@ -80,9 +82,14 @@ def main():
             return
         url = f"{url}/#/{role}"
 
+    # frameless + easy_drag=False(Task-21 自绘标题栏):拖拽只认页面里
+    # .pywebview-drag-region 元素(壳注入的 customize.js 机制);easy_drag
+    # 默认开着会把「整页」变成拖拽区,列表/表单全没法正常按住,必须关。
+    # 显示端 fullscreen 本就无边框,同参数无副作用。
     window = webview.create_window(
         f"叫号系统 v{__version__}", url, js_api=bridge,
-        fullscreen=(role == "display"))
+        fullscreen=(role == "display"),
+        frameless=True, easy_drag=False)
     # 服务器角色不自动更新(它是其他端的源头,由管理员手动控制)。
     if role in ("teacher", "display"):
         threading.Thread(target=_stage_and_notify, args=(window,),
@@ -137,7 +144,12 @@ def _start_gui() -> None:
     base_dir 旁,再重抛(有控制台的场景 stderr 仍可见)。
     """
     try:
-        webview.start()
+        # private_mode=False(Task-21 登录态留存):默认 ephemeral,关窗即丢
+        # localStorage → 每次开应用都要重新登录。关掉后 WebView2 用户数据
+        # 落 %APPDATA%\pywebview(pywebview init_storage 语义),更新覆盖
+        # exe 也不受影响。http 端口:本应用窗口全是远程 URL/内联 HTML,
+        # 不会启用 pywebview 内置 server,无固定端口冲突。
+        webview.start(private_mode=False)
     except Exception:
         tb = traceback.format_exc()
         print(tb, file=sys.stderr)
@@ -159,8 +171,8 @@ def _pick_role_dialog():
     """
     holder: dict = {}
     webview.create_window("选择本机角色", html=_picker_html(),
-                          js_api=_PickerApi(holder), width=560, height=430,
-                          resizable=False)
+                          js_api=_PickerApi(holder), width=560, height=470,
+                          resizable=False, frameless=True, easy_drag=False)
     _start_gui()
     return holder.get("role")
 
@@ -175,6 +187,22 @@ class _PickerApi:
         self.holder["role"] = role
         if webview.windows:
             webview.windows[0].destroy()
+
+    def quit(self) -> None:
+        # frameless 无系统关闭钮:× 走这里,行为同旧版直接关窗(不选即退)
+        if webview.windows:
+            webview.windows[0].destroy()
+
+
+def _chrome_bar(title: str) -> str:
+    """frameless 内联页共用的迷你标题栏:拖拽区 + 关闭钮。
+
+    pywebview 注入的 customize.js 令 .pywebview-drag-region 元素可拖窗;
+    关闭钮 stopPropagation 防误拖。两个 js_api(Bridge/_PickerApi)都有 quit。
+    """
+    return (f"<div class='bar pywebview-drag-region'><span>{title}</span>"
+            f"<button onmousedown='event.stopPropagation()' "
+            f"onclick='pywebview.api.quit()'>&times;</button></div>")
 
 
 def _picker_html() -> str:
@@ -191,7 +219,14 @@ border:1px solid rgba(255,255,255,.22);border-radius:14px;
 background:rgba(255,255,255,.07);transition:background .15s;text-align:center}
 button:hover{background:rgba(255,255,255,.16)}
 small{display:block;font-size:12px;opacity:.6;margin-top:4px}
+.bar{position:fixed;top:0;left:0;right:0;height:36px;display:flex;
+align-items:center;justify-content:space-between;padding:0 14px;
+font-size:13px;opacity:.8;cursor:default;user-select:none}
+.bar button{padding:0 10px;font-size:17px;line-height:36px;border:none;
+border-radius:8px;background:transparent}
+.bar button:hover{background:rgba(255,255,255,.16)}
 </style></head><body>
+""" + _chrome_bar("叫号中心") + """
 <h2>首次运行:选择本机角色</h2>
 <p>选择会保存在本机,下次启动不再询问</p>
 <div class="menu">
@@ -201,17 +236,31 @@ small{display:block;font-size:12px;opacity:.6;margin-top:4px}
 </div></body></html>"""
 
 
+_MINI_BAR_CSS = (
+    ".bar{position:fixed;top:0;left:0;right:0;height:36px;display:flex;"
+    "align-items:center;justify-content:space-between;padding:0 14px;"
+    "font-size:13px;color:#333;cursor:default;user-select:none}"
+    ".bar button{padding:0 10px;font-size:17px;line-height:36px;"
+    "border:none;border-radius:8px;background:transparent;cursor:pointer}"
+    ".bar button:hover{background:rgba(0,0,0,.08)}"
+)
+
+
 def _offline_html() -> str:
-    return ("<html><body style='font-family:sans-serif;padding:40px'>"
-            "<h2>正在寻找叫号服务器…</h2>"
+    return ("<html><head><style>" + _MINI_BAR_CSS + "</style></head>"
+            "<body style='font-family:sans-serif;padding:56px 40px 40px'>"
+            + _chrome_bar("叫号中心")
+            + "<h2>正在寻找叫号服务器…</h2>"
             "<p>找到后自动进入(也可关闭后重开)。</p>"
             "</body></html>")
 
 
 def _error_html(err: str) -> str:
     import html as html_escape
-    return ("<html><body style='font-family:sans-serif;padding:40px'>"
-            "<h2>服务器启动失败</h2>"
+    return ("<html><head><style>" + _MINI_BAR_CSS + "</style></head>"
+            "<body style='font-family:sans-serif;padding:56px 40px 40px'>"
+            + _chrome_bar("叫号中心")
+            + "<h2>服务器启动失败</h2>"
             f"<p style='color:#b00'>{html_escape.escape(err)}</p>"
             "<p>端口被占用?是否已开了一个实例?</p>"
             "</body></html>")

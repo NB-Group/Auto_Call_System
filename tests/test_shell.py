@@ -14,6 +14,7 @@ def test_bridge_surface():
     assert b.speak("测试") is None
     assert b.fullscreen(True) is None
     assert b.quit() is None
+    assert b.minimize() is None  # v1.3:自绘标题栏最小化
     svc.stop()
 
 

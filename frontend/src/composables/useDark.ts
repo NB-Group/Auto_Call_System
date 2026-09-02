@@ -20,11 +20,11 @@ function apply(dark: boolean, persist = true) {
 export function useDark() {
   function initTheme() {
     if (forced) { apply(true, false); return }
-    // 无保存值 → 默认浅色(不跟随系统):学校投影/办公环境,用户明确要白底。
+    // Task-21:无保存值 → 跟随系统 prefers-color-scheme(撤销"默认浅色")。
     // 默认不落盘(persist=false)—— 只有手动 toggle 才算显式选择、才持久化。
     const saved = localStorage.getItem(KEY)
     if (saved) apply(saved === 'dark')
-    else apply(false, false)
+    else apply(matchMedia('(prefers-color-scheme: dark)').matches, false)
   }
   function toggleDark(ev?: MouseEvent) {
     const toDark = !isDark.value

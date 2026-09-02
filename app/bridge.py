@@ -35,6 +35,12 @@ class Bridge:
         if webview.windows:
             webview.windows[0].destroy()
 
+    def minimize(self) -> None:
+        import webview
+
+        if webview.windows:
+            webview.windows[0].minimize()
+
     def get_update_config(self) -> str | None:
         # 角色门控:更新源配置只有服务器端可读写。老师/显示端页面走明文
         # HTTP,LAN 内注入的 JS 不得借此投毒 repo/mirrors 绕过 sha256 quorum。

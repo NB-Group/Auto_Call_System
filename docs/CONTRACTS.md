@@ -94,3 +94,7 @@ bridge 新增:
 壳 → 前端事件(经 evaluate_js 派发到 window):
 - CustomEvent 'cc-update',detail = {"version": "...", "notes": "..."}
   (新版已下载暂存、重启生效;前端据此显示横幅,按钮调 api.quit() 重启)
+
+## v1.3 增补(2026-09-02,Task-21)
+bridge 新增(自绘标题栏):
+- `minimize() -> null`   # 最小化窗口(webview.windows[0].minimize())

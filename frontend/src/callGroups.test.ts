@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { closeExpired, initGroups, onCall, onRetract } from './callGroups'
+import { closeExpired, groupCalls, initGroups, onCall, onRetract } from './callGroups'
 import type { CallItem } from './api'
 
 let nid = 1
@@ -96,5 +96,72 @@ describe('callGroups 显示端突发聚合', () => {
     expect(s.groups[0].closed).toBe(true)
     s = onCall(s, C({ student_name: '乙' }), 1300) // closed 旗标拦截
     expect(s.groups.length).toBe(2)
+  })
+})
+
+describe('windowMs 参数与 groupCalls 今日一批一行(Task-21)', () => {
+  it('默认窗 1.2s:3000ms 间隔不并组', () => {
+    let s = initGroups()
+    s = onCall(s, C(), 0)
+    s = onCall(s, C({ student_name: '乙' }), 3000)
+    expect(s.groups.length).toBe(2)
+  })
+
+  it('windowMs=4000:同 3000ms 间隔并组', () => {
+    let s = initGroups()
+    s = onCall(s, C(), 0)
+    s = onCall(s, C({ student_name: '乙' }), 3000, 4000)
+    expect(s.groups.length).toBe(1)
+    expect(s.groups[0].calls.length).toBe(2)
+  })
+
+  it('windowMs 边界:恰好 4000ms 仍并组,4001ms 分批', () => {
+    let s = initGroups()
+    s = onCall(s, C(), 0)
+    s = onCall(s, C({ student_name: '乙' }), 4000, 4000)
+    expect(s.groups.length).toBe(1)
+    s = onCall(s, C({ student_name: '丙' }), 8001, 4000)
+    expect(s.groups.length).toBe(2)
+  })
+
+  it('closeExpired 同样吃 windowMs', () => {
+    let s = initGroups()
+    s = onCall(s, C(), 0)
+    s = closeExpired(s, 3000, 4000)
+    expect(s.groups[0].closed).toBe(false) // 4s 窗内未过期
+    s = closeExpired(s, 4001, 4000)
+    expect(s.groups[0].closed).toBe(true)
+  })
+
+  it('groupCalls:窗口内同师同消息聚一批,输出新在前', () => {
+    const calls = [
+      C({ student_name: '丙', created_at: '2026-09-01 09:00:03' }),
+      C({ student_name: '甲', created_at: '2026-09-01 09:00:00' }),
+      C({ student_name: '乙', created_at: '2026-09-01 09:00:02' }),
+    ]
+    const batches = groupCalls(calls, 4000)
+    expect(batches.length).toBe(1)
+    expect(batches[0].map(c => c.student_name)).toEqual(['甲', '乙', '丙']) // 批内按时间正序
+  })
+
+  it('groupCalls:超窗分批、换消息分批;单条自成一批', () => {
+    const calls = [
+      C({ student_name: '丁', created_at: '2026-09-01 09:00:09' }),
+      C({ student_name: '丙', created_at: '2026-09-01 09:00:05', message: '带圆规' }),
+      C({ student_name: '乙', created_at: '2026-09-01 09:00:03' }),
+      C({ student_name: '甲', created_at: '2026-09-01 09:00:00' }),
+    ]
+    const batches = groupCalls(calls, 4000)
+    expect(batches.map(b => b.map(c => c.student_name)))
+      .toEqual([['丁'], ['丙'], ['甲', '乙']]) // 新在前;00/03 同批,05 换消息分批,09 与丙同窗界但消息不同再分批
+  })
+
+  it('groupCalls:默认窗 1.2s(与显示端 GROUP_WINDOW_MS 一致)', () => {
+    const calls = [
+      C({ student_name: '乙', created_at: '2026-09-01 09:00:02' }),
+      C({ student_name: '甲', created_at: '2026-09-01 09:00:00' }),
+    ]
+    expect(groupCalls(calls)).toHaveLength(2) // 2s 间隔 > 默认 1.2s → 分批
+    expect(groupCalls(calls, 2000)).toHaveLength(1) // 放宽到 2s → 并批
   })
 })

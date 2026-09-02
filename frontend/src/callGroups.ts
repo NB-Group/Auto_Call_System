@@ -22,10 +22,12 @@ export interface GroupsState {
 
 export const initGroups = (): GroupsState => ({ groups: [], seq: 1 })
 
-const sameTarget = (g: CallGroup, c: CallItem) =>
-  g.calls[0].teacher_name === c.teacher_name
-  && g.calls[0].office === c.office
-  && g.calls[0].message === c.message
+const sameKey = (a: CallItem, b: CallItem) =>
+  a.teacher_name === b.teacher_name
+  && a.office === b.office
+  && a.message === b.message
+
+const sameTarget = (g: CallGroup, c: CallItem) => sameKey(g.calls[0], c)
 
 const open = (g: CallGroup, now: number, windowMs: number) =>
   !g.closed && now - g.openedAt <= windowMs
@@ -71,4 +73,23 @@ export function closeExpired(
     ...s,
     groups: s.groups.map(g => (g.closed || now - g.openedAt > windowMs ? { ...g, closed: true } : g)),
   }
+}
+
+const ts = (c: CallItem) => new Date(c.created_at.replace(' ', 'T')).getTime()
+
+/**
+ * Task-21 今日列表「一批一行」:同师+同办公室+同消息、以首条为锚 windowMs
+ * 窗口内的连续叫号聚成一批(与 onCall 的 open() 同锚同判据,只是离线全量)。
+ * 输入新在前(API /today 顺序),输出亦新在前;单条叫号自成一批,
+ * 单成员批渲染与旧单行完全一致。
+ */
+export function groupCalls(calls: CallItem[], windowMs = GROUP_WINDOW_MS): CallItem[][] {
+  const chrono = [...calls].sort((a, b) => ts(a) - ts(b)) // 稳定排序,同刻保序
+  const batches: CallItem[][] = []
+  for (const c of chrono) {
+    const cur = batches[batches.length - 1]
+    if (cur && ts(c) - ts(cur[0]) <= windowMs && sameKey(cur[0], c)) cur.push(c)
+    else batches.push([c])
+  }
+  return batches.reverse()
 }

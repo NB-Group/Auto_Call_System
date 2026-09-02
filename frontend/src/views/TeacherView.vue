@@ -1,16 +1,22 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { api, token, type CallItem, type MeInfo } from '../api'
 import Dock from '../components/Dock.vue'
 import Palette from '../components/Palette.vue'
 import Toasts from '../components/Toasts.vue'
 import { useToast } from '../composables/useToast'
+import { groupCalls } from '../callGroups'
 
 const me = ref<MeInfo | null>(null)
 const today = ref<CallItem[]>([])
 const { push } = useToast()
 const now = ref(Date.now())
 setInterval(() => (now.value = Date.now()), 1000)
+
+// Task-21「一批一行」:Palette 连发 N 条同批叫号,今日列表按 4s 窗口聚成
+// 一行(显示端聚合窗 1.2s 只覆盖广播突发,老师手点间隔更宽,取更宽窗)。
+const TODAY_GROUP_MS = 4000
+const groups = computed(() => groupCalls(today.value, TODAY_GROUP_MS))
 
 async function refresh() { today.value = (await api.today()).calls }
 onMounted(async () => {
@@ -19,12 +25,27 @@ onMounted(async () => {
   await refresh()
 })
 
-async function undo(c: CallItem) {
-  try { await api.undo(c.id); await refresh(); push(`已撤销 ${c.student_name}`) }
-  catch (e: any) { push(`撤销失败:${e.message === 'gone' ? '超过 60 秒' : e.message}`) }
+// 批量撤销:逐条顺序调 undo(服务端按条校验 60s 窗),按成功数汇报。
+const undoing = ref(false)
+async function undoBatch(g: CallItem[]) {
+  if (undoing.value) return
+  undoing.value = true
+  let ok = 0
+  for (const c of g) {
+    try { await api.undo(c.id); ok++ } catch { /* 计数继续 */ }
+  }
+  undoing.value = false
+  await refresh()
+  if (ok === g.length) push(`已撤销 ${ok} 条`)
+  else if (ok === 0) push('撤销失败:超过 60 秒')
+  else push(`部分成功:已撤销 ${ok}/${g.length} 条`)
 }
+
 const undoable = (c: CallItem) =>
   !c.retracted_at && now.value - new Date(c.created_at.replace(' ', 'T')).getTime() < 60000
+// 整批都还在各自 60s 窗内才给批撤销(部分过期时逐条结果混乱,宁可不给)
+const batchUndoable = (g: CallItem[]) => g.every(undoable)
+const allRetracted = (g: CallItem[]) => g.every(c => c.retracted_at)
 </script>
 
 <template>
@@ -35,15 +56,16 @@ const undoable = (c: CallItem) =>
       <h2 text-14px font-600 style="color: var(--cc-text-2)">今日已叫({{ today.length }})</h2>
       <div class="glass-card" mt-3 p-2 flex="~ col" pos-relative>
         <TransitionGroup name="list">
-          <div v-for="(c, i) in today" :key="c.id" :style="{ '--stagger': Math.min(i, 8) }"
+          <div v-for="(g, i) in groups" :key="g[0].id" :style="{ '--stagger': Math.min(i, 8) }"
                flex="~ items-center gap-3" px-3 py-2>
-            <span w-64px text-13px style="color: var(--cc-text-3)">{{ c.created_at.slice(11, 16) }}</span>
-            <b>{{ c.student_name }}</b>
-            <span text-12px style="color: var(--cc-text-3)">{{ c.class_name }}</span>
-            <span v-if="c.message" class="cc-chip">{{ c.message }}</span>
-            <span v-if="c.retracted_at" text-12px style="color: var(--cc-text-4)">已撤销</span>
+            <span w-64px text-13px style="color: var(--cc-text-3)">{{ g[0].created_at.slice(11, 16) }}</span>
+            <b>{{ g.map(c => c.student_name).join('、') }}</b>
+            <span text-12px style="color: var(--cc-text-3)">{{ g[0].class_name }}</span>
+            <span v-if="g[0].message" class="cc-chip">{{ g[0].message }}</span>
+            <span v-if="allRetracted(g)" text-12px style="color: var(--cc-text-4)">已撤销</span>
             <span flex-1 />
-            <button v-if="undoable(c)" class="cc-btn" text-13px @click="undo(c)">撤销</button>
+            <button v-if="batchUndoable(g)" class="cc-btn" text-13px :disabled="undoing"
+                    @click="undoBatch(g)">撤销{{ g.length > 1 ? ` ${g.length} 条` : '' }}</button>
           </div>
         </TransitionGroup>
         <div v-if="!today.length" px-3 py-4 text-13px style="color: var(--cc-text-4)">
