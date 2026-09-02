@@ -98,3 +98,8 @@ bridge 新增:
 ## v1.3 增补(2026-09-02,Task-21)
 bridge 新增(自绘标题栏):
 - `minimize() -> null`   # 最小化窗口(webview.windows[0].minimize())
+
+## v1.4 增补(2026-09-02,Task-23)
+bridge 新增(显示端小窗形态):
+- `set_display_mode(mode: "expand"|"collapse") -> null`   # expand=进全屏,collapse=退回右下角小窗;幂等(目标态=当前态时不碰窗口)
+显示端窗口形态:右下角 400×250 无边框小窗常驻(on_top 置顶);页面内按钮一键展开全屏,来号自动展开,末组结束 12s 后自动收回小窗(手动全屏期间不自动收回)

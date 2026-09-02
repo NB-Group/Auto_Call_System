@@ -4,7 +4,8 @@ import { api, type CallItem } from '../api'
 import { connectWS } from '../ws'
 import ClassPicker from '../components/ClassPicker.vue'
 import { useDark } from '../composables/useDark'
-import { GROUP_WINDOW_MS, closeExpired, initGroups, onCall, onRetract, type GroupsState } from '../callGroups'
+import { GROUP_WINDOW_MS, closeExpired, initGroups, onCall as onGroupCallRaw, onRetract, type GroupsState } from '../callGroups'
+import { autoCollapse, initDisplayMode, onGroupCall as onModeCall, onGroupsEmpty, toggleManual, type DisplayModeState } from '../displayMode'
 
 const { forceDark } = useDark()
 const classId = Number(localStorage.getItem('cc_class')) || null
@@ -14,14 +15,31 @@ const gs = ref<GroupsState>(initGroups())
 const marquee = ref<CallItem[]>([])
 const online = ref(false)
 const clock = ref('')
+// Task-23 小窗形态:右下角常驻,来号自动全屏,末组结束 12s 自动收回
+const dm = ref<DisplayModeState>(initDisplayMode())
 let ws: ReturnType<typeof connectWS> | null = null
 let timer: number | undefined
 let sweepTimer: number | undefined
+
+/** 形态状态唯一出口:expanded 变化才调 bridge(浏览器环境可选链无副作用) */
+function syncMode(next: DisplayModeState) {
+  if (next.expanded !== dm.value.expanded)
+    window.pywebview?.api?.set_display_mode?.(next.expanded ? 'expand' : 'collapse')
+  dm.value = next
+}
+
+/** 组栈变化后补锚点:清空瞬间记录时间戳(autoCollapse 的 12s 起点) */
+function anchorEmpty() {
+  if (gs.value.groups.length === 0 && dm.value.lastGroupClosedAt === null)
+    syncMode(onGroupsEmpty(dm.value, Date.now()))
+}
 
 function tick() {
   const d = new Date()
   const p = (n: number) => String(n).padStart(2, '0')
   clock.value = `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+  // 1s 顺带驱动自动收起判定(纯函数幂等,expanded 已 false 时零开销)
+  syncMode(autoCollapse(dm.value, Date.now()))
 }
 
 function connect(sub?: number) {
@@ -30,17 +48,20 @@ function connect(sub?: number) {
     onStatus: v => (online.value = v),
     // 突发聚合:老师端循环 N 次 call → 服务端连发 N 条广播,同师同消息 1.2s 内聚一卡
     onCall: (call) => {
-      gs.value = onCall(gs.value, call, Date.now())
+      gs.value = onGroupCallRaw(gs.value, call, Date.now())
+      // 来号即展开(冷却期内新组也取消收起计时)
+      syncMode(onModeCall(dm.value))
       // 兜底清窗旗(时间检查本身会拦,这里只是让 closed 状态落定)
       clearTimeout(sweepTimer)
       sweepTimer = window.setTimeout(
-        () => (gs.value = closeExpired(gs.value, Date.now())), GROUP_WINDOW_MS + 100)
+        () => { gs.value = closeExpired(gs.value, Date.now()); anchorEmpty() }, GROUP_WINDOW_MS + 100)
       marquee.value = [call, ...marquee.value].slice(0, 30)
       window.pywebview?.api?.speak?.(call.announce)
     },
     onRetract: (id) => {
       gs.value = onRetract(gs.value, id)
       marquee.value = marquee.value.filter(c => c.id !== id)
+      anchorEmpty()
     },
   })
 }
@@ -53,6 +74,8 @@ function onPicked(id: number, name: string) {
   if (ws) ws.subscribe(id)
   else connect(id) // 陈旧校验清除了记忆 → 此刻才建连
 }
+
+const quit = () => window.pywebview?.api?.quit?.()
 
 onMounted(async () => {
   forceDark()
@@ -87,21 +110,63 @@ const sizeClass = computed(() => {
 })
 // filter(Boolean):message 为空('' .split(',') 得 [''])时不渲染空 chip
 const bigMsg = computed(() => (hero.value?.calls[0].message || '').split(',').filter(Boolean))
+// 小窗"今日已叫 N 人":走马灯栈长度(撤销已被过滤,即当前有效人数)
+const calledCount = computed(() => marquee.value.length)
 </script>
 
 <template>
-  <div v-if="!picked"><ClassPicker @picked="onPicked" /></div>
-  <div v-else h-full flex="~ col" overflow-hidden pos-relative>
-    <!-- 顶栏:班级+时钟+状态 -->
-    <header flex="~ items-center" justify-between px-10 py-6>
-      <span text-20px font-600>{{ className }}</span>
-      <!-- 冒号独立成 span:1s 脉冲闪烁,与秒走同步观感 -->
-      <span text-20px font-300 style="font-variant-numeric: tabular-nums"><span
-        v-for="(seg, i) in clock.split(':')" :key="i"><span v-if="i" class="colon">:</span>{{ seg }}</span></span>
-      <span text-13px :style="{ color: online ? 'var(--cc-theme)' : 'var(--cc-text-4)' }">
-        {{ online ? '● 已连接' : '○ 连接中断,自动重连中…' }}
-      </span>
-    </header>
+  <div v-if="!picked" h-full overflow-y-auto><ClassPicker @picked="onPicked" /></div>
+  <!-- Task-23:小窗(收起)↔ 全屏(展开)两形态;右下角原点缩放切换,
+       out-in 让旧形态先收进角落、新形态再从角落长出来 -->
+  <div v-else h-full overflow-hidden pos-relative flex="~">
+    <Transition name="mode" mode="out-in" appear>
+
+      <!-- 小窗形态:400×250 常驻卡(真实窗口内恰好满幅;浏览器回退居中) -->
+      <div v-if="!dm.expanded" key="corner" class="glass-card"
+           w-400px h-250px m-auto flex="~ col" overflow-hidden select-none>
+        <!-- 迷你拖拽条:壳 customize.js 令 .pywebview-drag-region 可拖窗 -->
+        <div class="corner-strip pywebview-drag-region" flex="~ items-center gap-2" px-10px>
+          <span text-11px font-600 style="color: var(--cc-text-3)">叫号中心</span>
+          <span text-11px :style="{ color: online ? 'var(--cc-theme)' : 'var(--cc-text-4)' }">
+            {{ online ? '● 已连接' : '○ 重连中' }}
+          </span>
+          <span flex-1 />
+          <button class="corner-x" title="关闭" @mousedown.stop @click="quit">×</button>
+        </div>
+        <!-- 主体:班级 + 大时钟 + 叫号概览 -->
+        <div flex-1 flex="~ col items-center justify-center" gap-4px overflow-hidden>
+          <div text-20px font-600 truncate max-w-360px>{{ className }}</div>
+          <div text-40px font-300 leading-none style="font-variant-numeric: tabular-nums"><span
+            v-for="(seg, i) in clock.split(':')" :key="i"><span v-if="i" class="colon">:</span>{{ seg }}</span></div>
+          <div v-if="gs.groups.length" text-13px truncate max-w-360px
+               style="color: var(--cc-theme)">
+            {{ hero!.calls.map(c => c.student_name).join('、') }}
+          </div>
+          <div v-else text-14px class="idle-hint" style="color: var(--cc-text-3)">暂无叫号 · 请留意播报</div>
+        </div>
+        <!-- 底行:一键全屏 + 今日计数 -->
+        <div flex="~ items-center justify-between" px-14px pb-10px>
+          <button class="cc-btn" text-13px py-1 px-3
+                  @mousedown.stop @click="syncMode(toggleManual(dm))">⛶ 全屏</button>
+          <span text-12px style="color: var(--cc-text-3)">今日已叫 {{ calledCount }} 人</span>
+        </div>
+      </div>
+
+      <!-- 展开形态:原 hero/历史/走马灯全屏 UI -->
+      <div v-else key="full" h-full w-full flex="~ col" overflow-hidden>
+        <!-- 悬浮退出钮(kiosk 顶右,唯一控件) -->
+        <button class="glass-pop exit-fs" fixed top-16px right-16px z-30
+                text-14px py-2 px-4 @mousedown.stop @click="syncMode(toggleManual(dm))">⤡ 退出全屏</button>
+        <!-- 顶栏:班级+时钟+状态 -->
+        <header flex="~ items-center" justify-between px-10 py-6>
+          <span text-20px font-600>{{ className }}</span>
+          <!-- 冒号独立成 span:1s 脉冲闪烁,与秒走同步观感 -->
+          <span text-20px font-300 style="font-variant-numeric: tabular-nums"><span
+            v-for="(seg, i) in clock.split(':')" :key="i"><span v-if="i" class="colon">:</span>{{ seg }}</span></span>
+          <span text-13px :style="{ color: online ? 'var(--cc-theme)' : 'var(--cc-text-4)' }">
+            {{ online ? '● 已连接' : '○ 连接中断,自动重连中…' }}
+          </span>
+        </header>
 
     <!-- 当前叫号 hero 组卡(一卡多人)+ 历史组栈 -->
     <main flex-1 flex="~ col items-center justify-center" gap-4 px-10 overflow-hidden>
@@ -151,10 +216,51 @@ const bigMsg = computed(() => (hero.value?.calls[0].message || '').split(',').fi
         </span>
       </div>
     </footer>
+      </div>
+    </Transition>
   </div>
 </template>
 
 <style scoped>
+/* ===== Task-23:小窗↔全屏形态切换(右下角原点缩放,像小窗长成全屏)===== */
+.mode-enter-active, .mode-leave-active {
+  transition: opacity var(--cc-dur-slow) var(--cc-ease-smooth),
+    transform var(--cc-dur-slow) var(--cc-ease-overshoot);
+  transform-origin: bottom right;
+}
+.mode-enter-from, .mode-leave-to { opacity: 0; transform: scale(0.34); }
+
+/* 小窗迷你拖拽条 */
+.corner-strip {
+  height: 28px;
+  flex: none;
+  font-size: 11px;
+  border-bottom: 1px solid var(--cc-border);
+  user-select: none;
+  cursor: default;
+}
+.corner-x {
+  width: 26px; height: 22px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: none; border-radius: var(--cc-radius-half);
+  background: transparent; color: var(--cc-text-2);
+  font-size: 14px; line-height: 1; cursor: pointer;
+  transition: background var(--cc-dur-fast) var(--cc-ease-smooth);
+}
+.corner-x:hover { background: #e8112d; color: #fff; }
+
+/* 全屏态悬浮退出钮:rest 低调半透明,hover 点亮 */
+.exit-fs {
+  border: 1px solid var(--cc-border);
+  color: var(--cc-text-2);
+  cursor: pointer;
+  opacity: 0.55;
+  transition: opacity var(--cc-dur-fast) var(--cc-ease-smooth),
+    transform var(--cc-dur-fast) var(--cc-ease-overshoot),
+    box-shadow var(--cc-dur-fast) var(--cc-ease-smooth);
+}
+.exit-fs:hover { opacity: 1; transform: scale(1.05); box-shadow: var(--cc-shadow-2); }
+
 .hero-enter-active { transition: all var(--cc-dur-slow) var(--cc-ease-overshoot); }
 .hero-enter-from { opacity: 0; transform: translateY(48px) scale(0.94); }
 .hero-leave-active { transition: all var(--cc-dur-fast) ease; position: absolute; }
@@ -258,5 +364,6 @@ const bigMsg = computed(() => (hero.value?.calls[0].message || '').split(',').fi
 @media (prefers-reduced-motion: reduce) {
   .breathe, .name-blk, .colon, .idle-hint, .settle, .msg-in,
   .hero-card::after { animation: none; }
+  .mode-enter-active, .mode-leave-active { transition: none; }
 }
 </style>

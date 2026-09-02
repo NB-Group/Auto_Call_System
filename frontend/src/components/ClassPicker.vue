@@ -15,22 +15,25 @@ onMounted(load)
 </script>
 
 <template>
-  <div h-full flex="~ col items-center justify-center" gap-6>
-    <h1 text-28px font-600 m-0>本教室是哪个班?</h1>
+  <!-- Task-23:显示端现在是 400×250 右下角小窗 —— 布局改紧凑自适应
+       (400px 内 2 列小卡;浏览器大页 ≥sm 3 列),班级多时容器内滚动 -->
+  <div h-full flex="~ col items-center justify-center" gap-4 px-4 py-6 overflow-y-auto>
+    <h1 text-20px sm:text-28px font-600 m-0 text-center>本教室是哪个班?</h1>
     <template v-if="failed">
       <!-- 加载失败:给出可重试的错误态,而非空白网格(Task-16 context C) -->
-      <p text-14px m-0 style="color: var(--cc-theme)">加载班级失败,请检查服务器连接</p>
-      <button class="cc-btn" @click="load">重试</button>
+      <p text-13px m-0 style="color: var(--cc-theme)">加载班级失败,请检查服务器连接</p>
+      <button class="cc-btn" text-13px @click="load">重试</button>
     </template>
     <template v-else>
-      <div grid="~ cols-3 gap-3" w-560px>
-        <button v-for="(c, i) in classes" :key="c.id" class="glass-card cls-in" p-6 text-18px
+      <div grid="~ cols-2 sm:cols-3 gap-2 sm:gap-3" w-full max-w-560px>
+        <button v-for="(c, i) in classes" :key="c.id" class="glass-card cls-in"
+                p-2 sm:p-6 text-15px sm:text-18px truncate
                 :style="{ '--stagger': Math.min(i, 8), cursor: 'pointer' }"
                 @click="emit('picked', c.id, c.name)">
           {{ c.name }}
         </button>
       </div>
-      <p text-13px style="color: var(--cc-text-3)">选择后本机将记住,可在设置中修改</p>
+      <p text-12px sm:text-13px style="color: var(--cc-text-3)">选择后本机将记住,可在设置中修改</p>
     </template>
   </div>
 </template>

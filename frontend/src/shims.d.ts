@@ -6,6 +6,7 @@ declare global {
       api?: {
         speak?: (text: string) => void
         fullscreen?: (on: boolean) => void
+        set_display_mode?: (mode: 'expand' | 'collapse') => void
         get_role?: () => string
         app_version?: () => string
         quit?: () => void

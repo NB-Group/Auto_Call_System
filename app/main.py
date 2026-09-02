@@ -16,6 +16,10 @@ from app.tts import TTSService
 
 DEV_URL = "http://127.0.0.1:5173"
 
+# Task-23 显示端小窗:右下角常驻尺寸 + 距屏幕边缘留白
+DISPLAY_W, DISPLAY_H = 400, 250
+DISPLAY_MARGIN = 16
+
 
 def parse_args(argv=None):
     p = argparse.ArgumentParser("叫号系统")
@@ -85,17 +89,48 @@ def main():
     # frameless + easy_drag=False(Task-21 自绘标题栏):拖拽只认页面里
     # .pywebview-drag-region 元素(壳注入的 customize.js 机制);easy_drag
     # 默认开着会把「整页」变成拖拽区,列表/表单全没法正常按住,必须关。
-    # 显示端 fullscreen 本就无边框,同参数无副作用。
-    window = webview.create_window(
-        f"叫号系统 v{__version__}", url, js_api=bridge,
-        fullscreen=(role == "display"),
-        frameless=True, easy_drag=False)
+    if role == "display":
+        # Task-23:显示端不再常驻 fullscreen,改为右下角小窗(一键/来号自动
+        # 全屏,由前端 set_display_mode 驱动)。on_top:winforms/gtk 均支持
+        # (winforms TopMost / gtk set_keep_above)。位置走创建参数 x/y ——
+        # 两个后端都消费 initial_x/initial_y;不使用 window.move()(其
+        # _shown_call 装饰器会阻塞等待 shown 事件,主线程 start 前调用会卡)。
+        kwargs = dict(width=DISPLAY_W, height=DISPLAY_H, resizable=False,
+                      on_top=True)
+        pos = _display_corner_pos()
+        if pos is not None:
+            kwargs["x"], kwargs["y"] = pos
+        window = webview.create_window(f"叫号系统 v{__version__}", url,
+                                       js_api=bridge, frameless=True,
+                                       easy_drag=False, **kwargs)
+    else:
+        window = webview.create_window(f"叫号系统 v{__version__}", url,
+                                       js_api=bridge, frameless=True,
+                                       easy_drag=False)
     # 服务器角色不自动更新(它是其他端的源头,由管理员手动控制)。
     if role in ("teacher", "display"):
         threading.Thread(target=_stage_and_notify, args=(window,),
                          daemon=True).start()
     _start_gui()
     tts.stop()
+
+
+def _display_corner_pos():
+    """显示端小窗初始位置:主屏右下角(webview.screens[0],logical px)。
+
+    webview.screens 是 module_property(免括号访问),内部 initialize()
+    GUI 库后取显示器几何;任何失败(无头/异常后端)返回 None → 落回
+    pywebview 默认居中,可接受。
+    """
+    try:
+        screens = webview.screens
+        if not screens:
+            return None
+        s = screens[0]
+        return (s.x + s.width - DISPLAY_W - DISPLAY_MARGIN,
+                s.y + s.height - DISPLAY_H - DISPLAY_MARGIN)
+    except Exception:
+        return None
 
 
 def _stage_and_notify(window) -> None:

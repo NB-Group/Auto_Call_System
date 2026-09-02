@@ -15,6 +15,11 @@ def test_bridge_surface():
     assert b.fullscreen(True) is None
     assert b.quit() is None
     assert b.minimize() is None  # v1.3:自绘标题栏最小化
+    # v1.4:显示端小窗形态切换(无窗口环境下为无副作用 no-op)
+    assert callable(b.set_display_mode)
+    assert b.set_display_mode("expand") is None
+    assert b.set_display_mode("collapse") is None
+    assert b.set_display_mode("nonsense") is None  # 非法 mode 忽略不炸
     svc.stop()
 
 

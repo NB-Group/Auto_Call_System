@@ -13,15 +13,32 @@ class Bridge:
     def __init__(self, role: str, tts: "TTSService"):
         self.role = role
         self.tts = tts
+        # 壳层全屏状态跟踪:toggle_fullscreen() 是纯切换(无目标态 API,
+        # 后端各自维护 is_fullscreen,Window 未暴露),必须自己记账防双切。
+        # 显示端(Task-23)初始即小窗,False 正确;teacher/server 永不全屏。
+        self._fullscreen = False
 
     def speak(self, text: str) -> None:
         self.tts.speak(text)
 
     def fullscreen(self, on: bool) -> None:
+        self.set_display_mode("expand" if on else "collapse")
+
+    def set_display_mode(self, mode: str) -> None:
+        """v1.4:显示端形态。'expand' → 全屏;'collapse' → 退回右下角小窗。
+
+        幂等:目标态与当前一致时不碰窗口(toggle 两次会切回去)。非法 mode
+        直接忽略,不炸调用方。
+        """
+        if mode not in ("expand", "collapse"):
+            return None
         import webview
 
-        if webview.windows:
+        want = mode == "expand"
+        if webview.windows and want != self._fullscreen:
             webview.windows[0].toggle_fullscreen()
+            self._fullscreen = want
+        return None
 
     def get_role(self) -> str:
         return self.role
