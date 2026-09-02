@@ -34,13 +34,14 @@ async function del(id: number) {
       <button class="cc-btn cc-btn-primary" @click="add">添加</button>
     </div>
     <div class="glass-card" p-2 flex="~ col">
-      <div v-for="s in items" :key="s.id" flex="~ items-center gap-3" px-3 py-2>
+      <div v-for="(s, i) in items" :key="s.id" class="cc-stagger cc-row-hover"
+           :style="{ '--stagger': Math.min(i, 8) }" flex="~ items-center gap-3" px-3 py-2 rounded-8px>
         <span class="cc-chip">✚ {{ s.text }}</span>
         <span text-12px style="color: var(--cc-text-3)">用了 {{ s.use_count }} 次</span>
         <span flex-1 />
         <button class="cc-btn" text-13px @click="del(s.id)">删除</button>
       </div>
-      <div v-if="!items.length" px-3 py-4 text-13px style="color: var(--cc-text-4)">
+      <div v-if="!items.length" class="cc-float" px-3 py-4 text-13px style="color: var(--cc-text-4)">
         还没有短语。添加几条常用的,叫号时敲首字母就能挂上。
       </div>
     </div>

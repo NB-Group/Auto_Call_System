@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- 与 assets/icon.ico / scripts/make_icon.py 同源的铃铛图标 -->
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="hsl(195 100% 55%)"/>
+      <stop offset="1" stop-color="hsl(210 90% 45%)"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="url(#g)"/>
+  <ellipse cx="22" cy="16" rx="26" ry="20" fill="#fff" opacity=".12"/>
+  <g fill="#fff">
+    <circle cx="32" cy="12.5" r="2.6"/>
+    <path d="M32 15.5a10.5 10.5 0 0 1 10.5 10.5v6.5l2.6 5.5H18.9l2.6-5.5v-6.5A10.5 10.5 0 0 1 32 15.5z"/>
+    <rect x="17" y="37" width="30" height="4.6" rx="2.3"/>
+    <circle cx="32" cy="44.8" r="3.6"/>
+  </g>
+  <g stroke="#fff" stroke-opacity=".7" stroke-width="2.4" stroke-linecap="round" fill="none">
+    <path d="M17.1 18.6A20 20 0 0 0 17.1 45.4"/>
+    <path d="M13.4 15.3A25 25 0 0 0 13.4 48.7"/>
+    <path d="M46.9 18.6A20 20 0 0 1 46.9 45.4"/>
+    <path d="M50.6 15.3A25 25 0 0 1 50.6 48.7"/>
+  </g>
+</svg>

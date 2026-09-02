@@ -50,7 +50,7 @@ async function createAdmin() {
 <template>
   <div max-w-640px mx-auto px-6 py-10>
     <!-- 首次:创建管理员 -->
-    <form v-if="needsAdmin" class="glass-card" p-8 flex="~ col gap-4" @submit.prevent="createAdmin">
+    <form v-if="needsAdmin" class="glass-card rise" style="--stagger: 0" p-8 flex="~ col gap-4" @submit.prevent="createAdmin">
       <h1 text-22px font-600 m-0>初始化服务器</h1>
       <p text-13px m-0 style="color: var(--cc-text-3)">首次使用,请创建管理员账号</p>
       <input v-model="username" class="cc-input" placeholder="管理员用户名">
@@ -59,7 +59,7 @@ async function createAdmin() {
     </form>
 
     <!-- 状态页 -->
-    <div v-else-if="needsAdmin === false" class="glass-card" p-8 flex="~ col gap-4">
+    <div v-else-if="needsAdmin === false" class="glass-card rise" style="--stagger: 0" p-8 flex="~ col gap-4">
       <h1 text-22px font-600 m-0>服务器运行中</h1>
       <div flex="~ justify-between"><span style="color:var(--cc-text-3)">版本</span><b>v{{ info?.version ?? '—' }}</b></div>
       <div flex="~ justify-between"><span style="color:var(--cc-text-3)">在线显示端</span><b>{{ info?.displays ?? '—' }}</b></div>
@@ -70,7 +70,7 @@ async function createAdmin() {
         进入管理后台
       </a>
     </div>
-    <div v-if="needsAdmin === false" class="glass-card" p-8 mt-4 flex="~ col gap-3">
+    <div v-if="needsAdmin === false" class="glass-card rise" style="--stagger: 1" p-8 mt-4 flex="~ col gap-3">
       <h2 text-16px font-600 m-0>更新设置</h2>
       <label flex="~ col gap-1" text-13px>
         GitHub 仓库(owner/name)
@@ -85,3 +85,18 @@ async function createAdmin() {
     <Toasts />
   </div>
 </template>
+
+<style scoped>
+/* Task-22:卡片逐张上浮入场(--stagger 错峰) */
+.rise {
+  animation: rise var(--cc-dur-slow) var(--cc-ease-overshoot) backwards;
+  animation-delay: calc(var(--stagger, 0) * 90ms);
+}
+@keyframes rise {
+  from { opacity: 0; transform: translateY(18px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rise { animation: none; }
+}
+</style>

@@ -57,18 +57,18 @@ const allRetracted = (g: CallItem[]) => g.every(c => c.retracted_at)
       <div class="glass-card" mt-3 p-2 flex="~ col" pos-relative>
         <TransitionGroup name="list">
           <div v-for="(g, i) in groups" :key="g[0].id" :style="{ '--stagger': Math.min(i, 8) }"
-               flex="~ items-center gap-3" px-3 py-2>
+               class="today-row" flex="~ items-center gap-3" px-3 py-2 rounded-8px>
             <span w-64px text-13px style="color: var(--cc-text-3)">{{ g[0].created_at.slice(11, 16) }}</span>
             <b>{{ g.map(c => c.student_name).join('、') }}</b>
             <span text-12px style="color: var(--cc-text-3)">{{ g[0].class_name }}</span>
             <span v-if="g[0].message" class="cc-chip">{{ g[0].message }}</span>
             <span v-if="allRetracted(g)" text-12px style="color: var(--cc-text-4)">已撤销</span>
             <span flex-1 />
-            <button v-if="batchUndoable(g)" class="cc-btn" text-13px :disabled="undoing"
+            <button v-if="batchUndoable(g)" class="cc-btn undo-btn" text-13px :disabled="undoing"
                     @click="undoBatch(g)">撤销{{ g.length > 1 ? ` ${g.length} 条` : '' }}</button>
           </div>
         </TransitionGroup>
-        <div v-if="!today.length" px-3 py-4 text-13px style="color: var(--cc-text-4)">
+        <div v-if="!today.length" class="cc-float" px-3 py-4 text-13px style="color: var(--cc-text-4)">
           还没有叫号记录,从上方搜索开始 ⌘
         </div>
       </div>
@@ -82,9 +82,18 @@ const allRetracted = (g: CallItem[]) => g.every(c => c.retracted_at)
 .list-move { transition: transform var(--cc-dur-cozy) var(--cc-ease-smooth); }
 .list-enter-active {
   transition: all var(--cc-dur-cozy) var(--cc-ease-smooth);
-  transition-delay: calc(var(--stagger, 0) * 28ms);
+  transition-delay: calc(var(--stagger, 0) * var(--cc-stagger-step));
 }
 .list-enter-from { opacity: 0; transform: translateY(10px); }
 .list-leave-active { transition: all var(--cc-dur-fast) ease; position: absolute; }
 .list-leave-to { opacity: 0; }
+
+/* Task-22:行 hover 右移 + 底色;撤销按钮 hover 放大弹出 */
+.today-row {
+  transition: background-color var(--cc-dur-fast) var(--cc-ease-smooth),
+    transform var(--cc-dur-fast) var(--cc-ease-smooth);
+}
+.today-row:hover { background-color: var(--cc-fill-1); transform: translateX(2px); }
+.undo-btn:hover { transform: translateY(-1px) scale(1.05); }
+.undo-btn:active { transform: translateY(0) scale(0.97); }
 </style>

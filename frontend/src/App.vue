@@ -48,12 +48,15 @@ onMounted(() => {
   overflow-y: auto;
 }
 
-/* 路由切换:淡入淡出 + 轻微上浮(out-in 避免新旧页叠滚) */
+/* 路由切换:淡入淡出 + 上浮 + 轻微缩放(out-in 避免新旧页叠滚) */
 .page-enter-active {
   transition: opacity var(--cc-dur-page-in) var(--cc-ease-smooth),
     transform var(--cc-dur-page-in) var(--cc-ease-smooth);
 }
-.page-leave-active { transition: opacity var(--cc-dur-page-out) ease; }
-.page-enter-from { opacity: 0; transform: translateY(10px); }
-.page-leave-to { opacity: 0; }
+.page-leave-active {
+  transition: opacity var(--cc-dur-page-out) ease,
+    transform var(--cc-dur-page-out) ease;
+}
+.page-enter-from { opacity: 0; transform: translateY(10px) scale(0.98); }
+.page-leave-to { opacity: 0; transform: scale(0.985); }
 </style>

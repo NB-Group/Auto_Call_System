@@ -73,7 +73,7 @@ async function removeClass(c: Cls) {
       <h1 text-20px font-600 m-0>管理后台</h1>
       <div flex gap-2>
         <button v-for="t in (['teachers','classes','history'] as const)" :key="t"
-                :class="['cc-btn', { 'cc-btn-primary': tab === t }]" @click="tab = t; refresh()">
+                class="cc-btn tab-btn" :class="{ 'tab-active': tab === t }" @click="tab = t; refresh()">
           {{ { teachers: '老师', classes: '班级', history: '历史' }[t] }}
         </button>
         <a href="#/login" class="cc-btn" style="text-decoration:none">退出</a>
@@ -89,7 +89,8 @@ async function removeClass(c: Cls) {
         <input v-model="newTeacher.office" class="cc-input" placeholder="办公室">
         <button class="cc-btn cc-btn-primary" @click="addTeacher">添加</button>
       </div>
-      <div v-for="t in teachers" :key="t.id" flex="~ items-center gap-3" px-2 py-1>
+      <div v-for="(t, i) in teachers" :key="t.id" class="cc-stagger cc-row-hover"
+           :style="{ '--stagger': Math.min(i, 8) }" flex="~ items-center gap-3" px-2 py-1>
         <b>{{ t.display_name || t.username }}</b>
         <span class="cc-chip" v-if="t.role === 'admin'">管理员</span>
         <span text-13px style="color:var(--cc-text-3)">{{ t.username }} · {{ t.office }}</span>
@@ -106,7 +107,8 @@ async function removeClass(c: Cls) {
                @keydown.enter="addClass">
         <button class="cc-btn cc-btn-primary" @click="addClass">添加</button>
       </div>
-      <div v-for="c in classes" :key="c.id" class="glass-card" p-4 flex="~ col gap-2">
+      <div v-for="(c, i) in classes" :key="c.id" class="glass-card cc-stagger"
+           :style="{ '--stagger': Math.min(i, 8) }" p-4 flex="~ col gap-2">
         <div flex="~ items-center gap-3">
           <b text-16px>{{ c.name }}</b>
           <span flex-1 />
@@ -127,7 +129,8 @@ async function removeClass(c: Cls) {
       <div flex="~ items-center justify-between" mb-2>
         <input v-model="historyDate" class="cc-input" type="date" @change="refresh">
       </div>
-      <div v-for="c in history" :key="c.id" flex="~ items-center gap-3" px-2 py-1 text-14px>
+      <div v-for="(c, i) in history" :key="c.id" class="cc-stagger cc-row-hover"
+           :style="{ '--stagger': Math.min(i, 8) }" flex="~ items-center gap-3" px-2 py-1 text-14px>
         <span w-64px style="color:var(--cc-text-3)">{{ c.created_at.slice(11, 16) }}</span>
         <b>{{ c.student_name }}</b>
         <span style="color:var(--cc-text-3)">{{ c.class_name }}</span>
@@ -136,8 +139,26 @@ async function removeClass(c: Cls) {
         <span text-12px style="color:var(--cc-text-3)">{{ c.teacher_name }}</span>
         <span v-if="c.retracted_at" class="cc-chip" style="color:var(--cc-text-4)">已撤销</span>
       </div>
-      <div v-if="!history.length" px-2 py-4 text-13px style="color:var(--cc-text-4)">当日无记录</div>
+      <div v-if="!history.length" class="cc-float" px-2 py-4 text-13px style="color:var(--cc-text-4)">当日无记录</div>
     </section>
     <Toasts />
   </div>
 </template>
+
+<style scoped>
+/* Task-22:页签 = 下划线指示条(origin left,scaleX 0→1 回弹)+ 主题色点亮 */
+.tab-btn { position: relative; }
+.tab-btn::after {
+  content: '';
+  position: absolute; left: 14px; right: 14px; bottom: 3px; height: 2px;
+  border-radius: 999px; background: var(--cc-theme);
+  transform: scaleX(0); transform-origin: left center;
+  transition: transform var(--cc-dur-cozy) var(--cc-ease-overshoot);
+}
+.tab-btn.tab-active {
+  color: var(--cc-theme);
+  background-color: var(--cc-theme-10);
+  border-color: var(--cc-theme-40);
+}
+.tab-btn.tab-active::after { transform: scaleX(1); }
+</style>

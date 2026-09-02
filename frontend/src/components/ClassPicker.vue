@@ -24,8 +24,9 @@ onMounted(load)
     </template>
     <template v-else>
       <div grid="~ cols-3 gap-3" w-560px>
-        <button v-for="c in classes" :key="c.id" class="glass-card" p-6 text-18px
-                style="cursor:pointer" @click="emit('picked', c.id, c.name)">
+        <button v-for="(c, i) in classes" :key="c.id" class="glass-card cls-in" p-6 text-18px
+                :style="{ '--stagger': Math.min(i, 8), cursor: 'pointer' }"
+                @click="emit('picked', c.id, c.name)">
           {{ c.name }}
         </button>
       </div>
@@ -33,3 +34,22 @@ onMounted(load)
     </template>
   </div>
 </template>
+
+<style scoped>
+/* Task-22:班级卡逐格弹入 + hover 抬升放大 */
+.cls-in {
+  animation: cls-in var(--cc-dur-cozy) var(--cc-ease-overshoot) backwards;
+  animation-delay: calc(var(--stagger, 0) * var(--cc-stagger-step));
+  transition: transform var(--cc-dur-fast) var(--cc-ease-smooth),
+    box-shadow var(--cc-dur-fast) var(--cc-ease-smooth);
+}
+@keyframes cls-in {
+  from { opacity: 0; transform: scale(0.8); }
+  to { opacity: 1; transform: none; }
+}
+.cls-in:hover { transform: translateY(-3px) scale(1.03); box-shadow: var(--cc-shadow-2); }
+.cls-in:active { transform: translateY(0) scale(0.97); }
+@media (prefers-reduced-motion: reduce) {
+  .cls-in { animation: none; }
+}
+</style>

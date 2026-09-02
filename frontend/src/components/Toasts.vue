@@ -15,8 +15,10 @@ const { toasts } = useToast()
 </template>
 
 <style scoped>
+/* 弹入:上浮 + 轻微回弹旋转;离场淡出;栈内其余条目 FLIP 上滑补位 */
 .toast-enter-active { transition: all var(--cc-dur-cozy) var(--cc-ease-overshoot); }
-.toast-leave-active { transition: all var(--cc-dur-fast) ease; }
-.toast-enter-from { opacity: 0; transform: translateY(16px) scale(0.95) rotate(-1deg); }
-.toast-leave-to { opacity: 0; transform: translateY(8px); }
+.toast-leave-active { transition: all var(--cc-dur-fast) ease; position: absolute; width: 100%; }
+.toast-enter-from { opacity: 0; transform: translateY(16px) scale(0.92) rotate(-2deg); }
+.toast-leave-to { opacity: 0; transform: translateY(8px) scale(0.96); }
+.toast-move { transition: transform var(--cc-dur-cozy) var(--cc-ease-smooth); }
 </style>

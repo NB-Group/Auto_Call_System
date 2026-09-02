@@ -24,6 +24,7 @@ jobs:
           $v = "${{ github.ref_name }}" -replace '^v',''
           python -m nuitka --onefile --assume-yes-for-downloads `
             --windows-console-mode=disable `
+            --windows-icon-from-ico=assets/icon.ico `
             --include-package=win32com --include-package=win32 --include-module=pythoncom `
             --include-data-dir=server/static=server/static `
             --output-filename="call-center-$v-x64.exe" `

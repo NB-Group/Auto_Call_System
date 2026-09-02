@@ -125,7 +125,7 @@ const PLACEHOLDER = computed(() =>
       <span v-for="p in state.picked" :key="`p-${p.id}`" class="cc-chip chip" font-600 cursor-pointer
             style="background: var(--cc-theme); color: #fff; border-color: transparent"
             @click="dispatch({ t: 'unpick', id: p.id })">
-        {{ p.name }} ✕
+        {{ p.name }}<span class="chip-x">✕</span>
       </span>
     </TransitionGroup>
 
@@ -174,25 +174,55 @@ const PLACEHOLDER = computed(() =>
 </template>
 
 <style scoped>
-.result.active { background: var(--cc-theme-10); }
-.result:hover { background: var(--cc-fill-1); }
+/* 结果行:hover 右滑 4px;左侧主题色指示条 scaleX 0→1(origin left);active 主题色光晕 */
+.result {
+  position: relative;
+  transition: background-color var(--cc-dur-fast) var(--cc-ease-smooth),
+    box-shadow var(--cc-dur-fast) var(--cc-ease-smooth),
+    transform var(--cc-dur-fast) var(--cc-ease-smooth);
+}
+.result::before {
+  content: '';
+  position: absolute; left: 0; top: 22%; bottom: 22%; width: 3px;
+  border-radius: 999px; background: var(--cc-theme);
+  transform: scaleX(0); transform-origin: left center;
+  transition: transform var(--cc-dur-cozy) var(--cc-ease-overshoot);
+}
+.result:hover { background-color: var(--cc-fill-1); transform: translateX(4px); }
+.result:hover::before, .result.active::before { transform: scaleX(1); }
+.result.active {
+  background-color: var(--cc-theme-10);
+  box-shadow: 0 0 0 1px var(--cc-theme-20), 0 4px 14px var(--cc-theme-20);
+}
 input { border: none; background: transparent; padding-left: 4px; }
 input:focus { box-shadow: none; border: none; }
 
-/* 结果行入场:淡入 + 8px 上浮,按 --stagger 逐行错峰(≤8 行封顶) */
+/* 结果行入场:淡入 + 8px 上浮,按 --stagger 逐行错峰(≤8 行封顶)。
+   fill 用 backwards:结束后不驻留 keyframe 终态,否则动画帧压过 hover 的 transform 过渡 */
 .row-in {
-  animation: row-in var(--cc-dur-cozy) var(--cc-ease-smooth) both;
-  animation-delay: calc(var(--stagger, 0) * 28ms);
+  animation: row-in var(--cc-dur-cozy) var(--cc-ease-smooth) backwards;
+  animation-delay: calc(var(--stagger, 0) * var(--cc-stagger-step));
 }
 @keyframes row-in {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: none; }
 }
 
-/* chip 弹入:0.6→1 缩放 + 回弹;移除淡出 */
+/* chip 弹入:0.6→1 缩放 + 回弹;移除 = 抖动淡出(shake-fade);✕ hover 旋转 90° */
 .chip-enter-active { transition: all var(--cc-dur-cozy) var(--cc-ease-overshoot); }
-.chip-leave-active { transition: all var(--cc-dur-fast) ease; }
+.chip-leave-active { animation: chip-out var(--cc-dur-cozy) var(--cc-ease-smooth) both; }
 .chip-enter-from { opacity: 0; transform: scale(0.6); }
-.chip-leave-to { opacity: 0; transform: scale(0.8); }
 .chip-move { transition: transform var(--cc-dur-cozy) var(--cc-ease-smooth); }
+@keyframes chip-out {
+  0% { opacity: 1; transform: translateX(0) rotate(0deg) scale(1); }
+  20% { opacity: 1; transform: translateX(-5px) rotate(-2.5deg) scale(1); }
+  45% { opacity: .9; transform: translateX(5px) rotate(2.5deg) scale(.96); }
+  70% { opacity: .6; transform: translateX(-3px) rotate(-1.5deg) scale(.9); }
+  100% { opacity: 0; transform: translateX(0) rotate(0deg) scale(.7); }
+}
+.chip-x {
+  display: inline-block; margin-left: 2px; font-weight: 400; opacity: .85;
+  transition: transform var(--cc-dur-cozy) var(--cc-ease-overshoot);
+}
+.chip:hover .chip-x { transform: rotate(90deg) scale(1.15); opacity: 1; }
 </style>
