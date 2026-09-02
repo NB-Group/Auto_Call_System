@@ -1,9 +1,23 @@
+import inspect
+import os
+
 import pytest
 
 import app.main as main_mod
 from app.bridge import Bridge
 from app.config import load_config, save_config
 from app.tts import TTSService, NullBackend
+
+
+def test_frameless_platform_split():
+    """Live-test 修复:Wayland 下 JS 拖拽/定位是 no-op → Linux 走系统窗框。
+    frameless 一律跟随 FRAMELESS 常量(= os.name=='nt'),不得再硬编码 True;
+    否则 Linux/Wayland 上的小窗既拖不动、teacher 窗也没有原生移动条。"""
+    assert main_mod.FRAMELESS == (os.name == "nt")
+    src = inspect.getsource(main_mod)
+    assert "frameless=True" not in src, "存在硬编码 frameless=True,应改用 FRAMELESS"
+    # create_window 调用点都应显式传 frameless=FRAMELESS(共 5 处:错误/离线/显示/teacher/选角)
+    assert src.count("frameless=FRAMELESS") == 5
 
 
 def test_bridge_surface():

@@ -21,8 +21,10 @@ onMounted(() => {
 
 <template>
   <TitleBar v-if="showBar" />
-  <!-- 有栏路由:内容整体下移 40px,滚动收在本容器(body 不滚,Toasts/横幅 fixed 不受影响) -->
-  <div :class="showBar ? 'app-frame' : ''">
+  <!-- 有栏路由:内容整体下移 40px,滚动收在本容器(body 不滚,Toasts/横幅 fixed 不受影响)。
+       h-full 无条件挂:无栏路由(/display)也保住 #app→view 的高度链 —— 否则包裹层
+       高度 auto,DisplayView 根的 h-full 百分比塌陷,小窗在浏览器回退时无法垂直居中 -->
+  <div h-full :class="showBar ? 'app-frame' : ''">
     <!-- 路由切换:淡入淡出 + 轻微上浮(out-in 避免新旧页叠滚) -->
     <router-view v-slot="{ Component }">
       <Transition name="page" mode="out-in">

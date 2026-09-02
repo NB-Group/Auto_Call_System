@@ -1,6 +1,7 @@
 """入口:角色解析 → 发现/启动服务器 → 打开 pywebview 窗口。"""
 import argparse
 import json
+import os
 import sys
 import threading
 import time
@@ -19,6 +20,13 @@ DEV_URL = "http://127.0.0.1:5173"
 # Task-23 显示端小窗:右下角常驻尺寸 + 距屏幕边缘留白
 DISPLAY_W, DISPLAY_H = 400, 250
 DISPLAY_MARGIN = 16
+
+# 平台窗框分叉(Live-test 修复):pywebview 的 JS 拖拽(.pywebview-drag-region)
+# 与 window.move 都是 X11/Win32 机制 —— Wayland 下全是 no-op,frameless 小窗
+# 既拖不动也钉不住角。Linux 交给 WM 系统窗框(原生拖动/缩放,Wayland 可用);
+# Windows(生产)保持 frameless + 自绘栏。页面内拖拽条保留(Windows 生效,
+# Linux 无害 —— customize.js 的 X11 路径不被触发)。
+FRAMELESS = os.name == "nt"
 
 
 def parse_args(argv=None):
@@ -66,7 +74,7 @@ def main():
             start_server(static_dir=None)
         except Exception as e:  # 端口占用等:弹窗报错,不静默退(I6)
             webview.create_window("服务器启动失败", html=_error_html(str(e)),
-                                  js_api=bridge, frameless=True,
+                                  js_api=bridge, frameless=FRAMELESS,
                                   easy_drag=False)
             _start_gui()
             return
@@ -75,7 +83,7 @@ def main():
         url = resolve_server_url(args.server_url, args.dev)
         if url is None:
             window = webview.create_window("叫号系统", _offline_html(),
-                                           js_api=bridge, frameless=True,
+                                           js_api=bridge, frameless=FRAMELESS,
                                            easy_drag=False)
             if role in ("teacher", "display"):
                 threading.Thread(target=_stage_and_notify, args=(window,),
@@ -95,17 +103,24 @@ def main():
         # (winforms TopMost / gtk set_keep_above)。位置走创建参数 x/y ——
         # 两个后端都消费 initial_x/initial_y;不使用 window.move()(其
         # _shown_call 装饰器会阻塞等待 shown 事件,主线程 start 前调用会卡)。
-        kwargs = dict(width=DISPLAY_W, height=DISPLAY_H, resizable=False,
-                      on_top=True)
+        # (Wayland 已知边界:协议禁止客户端自定位,合成器可无视 x/y 自行放置,
+        # 拖动/位置交给系统窗框后由用户手动摆放,不影响功能。)
+        # resizable:Windows 保持 False(固定小窗防误拖);Linux 放开 ——
+        # GTK 对非 resizable 窗口下 min=max 尺寸 hint,部分 Wayland 合成器
+        # 全屏时仍按 max_size 截留内容(全屏后内容停留 400×250 的元凶之一)。
+        # 可缩放则无 max hint,fullscreen() 正常铺满。winforms 全屏走显式
+        # SetWindowPos 屏幕尺寸,不受 resizable 影响。
+        kwargs = dict(width=DISPLAY_W, height=DISPLAY_H,
+                      resizable=not FRAMELESS, on_top=True)
         pos = _display_corner_pos()
         if pos is not None:
             kwargs["x"], kwargs["y"] = pos
         window = webview.create_window(f"叫号系统 v{__version__}", url,
-                                       js_api=bridge, frameless=True,
+                                       js_api=bridge, frameless=FRAMELESS,
                                        easy_drag=False, **kwargs)
     else:
         window = webview.create_window(f"叫号系统 v{__version__}", url,
-                                       js_api=bridge, frameless=True,
+                                       js_api=bridge, frameless=FRAMELESS,
                                        easy_drag=False)
     # 服务器角色不自动更新(它是其他端的源头,由管理员手动控制)。
     if role in ("teacher", "display"):
@@ -207,7 +222,8 @@ def _pick_role_dialog():
     holder: dict = {}
     webview.create_window("选择本机角色", html=_picker_html(),
                           js_api=_PickerApi(holder), width=560, height=470,
-                          resizable=False, frameless=True, easy_drag=False)
+                          resizable=False, frameless=FRAMELESS,
+                          easy_drag=False)
     _start_gui()
     return holder.get("role")
 

@@ -152,8 +152,10 @@ const calledCount = computed(() => marquee.value.length)
         </div>
       </div>
 
-      <!-- 展开形态:原 hero/历史/走马灯全屏 UI -->
-      <div v-else key="full" h-full w-full flex="~ col" overflow-hidden>
+      <!-- 展开形态:原 hero/历史/走马灯全屏 UI。
+           fixed inset-0:脱离祖先高度链(App.vue 无栏路由的包裹 div 高度 auto,
+           h-full 百分比会塌陷成内容高),直接锚定视口全幅,任何窗口尺寸都撑满 -->
+      <div v-else key="full" fixed inset-0 flex="~ col" overflow-hidden>
         <!-- 悬浮退出钮(kiosk 顶右,唯一控件) -->
         <button class="glass-pop exit-fs" fixed top-16px right-16px z-30
                 text-14px py-2 px-4 @mousedown.stop @click="syncMode(toggleManual(dm))">⤡ 退出全屏</button>
