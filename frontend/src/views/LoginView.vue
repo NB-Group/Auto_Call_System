@@ -23,16 +23,40 @@ async function submit() {
 
 <template>
   <div h-full flex="~ items-center justify-center">
-    <form class="glass-card" w-360px p-8 flex="~ col gap-4" @submit.prevent="submit">
-      <h1 text-22px font-600 m-0>叫号中心</h1>
-      <p text-13px m-0 style="color: var(--cc-text-3)">老师登录</p>
-      <input v-model="username" class="cc-input" placeholder="用户名" autocomplete="username">
-      <input v-model="password" class="cc-input" type="password" placeholder="密码"
-             autocomplete="current-password">
+    <form class="glass-card card-in" w-360px p-8 flex="~ col gap-4" @submit.prevent="submit">
+      <h1 text-22px font-600 m-0 class="stagger" :style="{ '--stagger': 1 }">叫号中心</h1>
+      <p text-13px m-0 class="stagger" :style="{ '--stagger': 2 }" style="color: var(--cc-text-3)">老师登录</p>
+      <input v-model="username" class="cc-input stagger" :style="{ '--stagger': 3 }"
+             placeholder="用户名" autocomplete="username">
+      <input v-model="password" class="cc-input stagger" :style="{ '--stagger': 4 }" type="password"
+             placeholder="密码" autocomplete="current-password">
       <div v-if="err" text-13px style="color: var(--cc-theme)">{{ err }}</div>
-      <button class="cc-btn cc-btn-primary" :disabled="busy" mt-2>
+      <button class="cc-btn cc-btn-primary stagger" :style="{ '--stagger': 5 }" :disabled="busy" mt-2>
         {{ busy ? '登录中…' : '登 录' }}
       </button>
     </form>
   </div>
 </template>
+
+<style scoped>
+/* 卡片入场:上浮 24px + 淡入,450ms 回弹 */
+.card-in {
+  animation: card-in var(--cc-dur-name) var(--cc-ease-overshoot) both;
+}
+@keyframes card-in {
+  from { opacity: 0; transform: translateY(24px); }
+  to { opacity: 1; transform: none; }
+}
+/* 子元素逐个错峰跟上(同面板的 --stagger 手法) */
+.stagger {
+  animation: rise-in var(--cc-dur-cozy) var(--cc-ease-smooth) both;
+  animation-delay: calc(var(--stagger, 0) * 60ms);
+}
+@keyframes rise-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .card-in, .stagger { animation: none; }
+}
+</style>

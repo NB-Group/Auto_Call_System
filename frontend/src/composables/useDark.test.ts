@@ -42,6 +42,14 @@ describe('useDark:forceDark 抵御后至的 initTheme(I4)', () => {
     expect(document.documentElement.classList.contains('dark')).toBe(false)
   })
 
+  it('默认浅色:无保存值时忽略系统深色偏好(Task-20)', async () => {
+    vi.stubGlobal('matchMedia', () => ({ matches: true })) // 系统是深色也不跟随
+    const { initTheme } = await freshDark()
+    initTheme()
+    expect(document.documentElement.classList.contains('dark')).toBe(false)
+    expect(localStorage.getItem('cc_theme')).toBeNull() // 默认不落盘,手动选择才持久化
+  })
+
   it('强制后:initTheme 不回改,且不写 localStorage', async () => {
     localStorage.setItem('cc_theme', 'light') // 同 profile 老师端存过浅色
     const { initTheme, forceDark } = await freshDark()

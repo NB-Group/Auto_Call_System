@@ -17,6 +17,10 @@
   --cc-dur-fast: 180ms;
   --cc-dur-cozy: 330ms;
   --cc-dur-slow: 550ms;
+  /* Task-20 动效补充档位:名字 blur-in / 登录卡入场 450ms,路由切换出 150ms 入 250ms */
+  --cc-dur-name: 450ms;
+  --cc-dur-page-out: 150ms;
+  --cc-dur-page-in: 250ms;
   --cc-ease-smooth: cubic-bezier(0.22, 1, 0.36, 1);
   --cc-ease-overshoot: cubic-bezier(0.34, 2, 0.6, 1);
 
@@ -97,10 +101,14 @@ body {
 }
 .cc-btn:hover { background: var(--cc-fill-2); transform: translateY(-1px); }
 .cc-btn:active { transform: translateY(0) scale(0.97); }
+/* 键盘焦点环:用 outline 不覆盖 primary 已有的彩色投影 */
+.cc-btn:focus-visible { outline: 2px solid var(--cc-theme-40); outline-offset: 2px; }
 .cc-btn-primary {
   background: var(--cc-theme); color: #fff; border-color: transparent;
   box-shadow: 0 4px 16px var(--cc-theme-40);
 }
+/* 主按钮 hover 亮度脉升(配合 .cc-btn 的 all 过渡,不另起 keyframes) */
+.cc-btn-primary:hover { filter: brightness(1.08); }
 .cc-input {
   border: 1px solid var(--cc-border);
   border-radius: var(--cc-radius-half);
@@ -128,5 +136,6 @@ body {
 @media (prefers-reduced-motion: reduce) {
   :root {
     --cc-dur-fast: 0ms; --cc-dur-cozy: 0ms; --cc-dur-slow: 0ms;
+    --cc-dur-name: 0ms; --cc-dur-page-out: 0ms; --cc-dur-page-in: 0ms;
   }
 }

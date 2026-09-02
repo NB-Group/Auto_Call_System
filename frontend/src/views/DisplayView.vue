@@ -4,17 +4,19 @@ import { api, type CallItem } from '../api'
 import { connectWS } from '../ws'
 import ClassPicker from '../components/ClassPicker.vue'
 import { useDark } from '../composables/useDark'
+import { GROUP_WINDOW_MS, closeExpired, initGroups, onCall, onRetract, type GroupsState } from '../callGroups'
 
 const { forceDark } = useDark()
 const classId = Number(localStorage.getItem('cc_class')) || null
 const className = ref(localStorage.getItem('cc_class_name') || '')
 const picked = ref(classId !== null)
-const cards = ref<CallItem[]>([])
+const gs = ref<GroupsState>(initGroups())
 const marquee = ref<CallItem[]>([])
 const online = ref(false)
 const clock = ref('')
 let ws: ReturnType<typeof connectWS> | null = null
 let timer: number | undefined
+let sweepTimer: number | undefined
 
 function tick() {
   clock.value = new Date().toLocaleTimeString('zh-CN', { hour12: false })
@@ -24,13 +26,18 @@ function connect(sub?: number) {
   ws = connectWS({
     classId: sub,
     onStatus: v => (online.value = v),
+    // 突发聚合:老师端循环 N 次 call → 服务端连发 N 条广播,同师同消息 1.2s 内聚一卡
     onCall: (call) => {
-      cards.value = [call, ...cards.value].slice(0, 3)
+      gs.value = onCall(gs.value, call, Date.now())
+      // 兜底清窗旗(时间检查本身会拦,这里只是让 closed 状态落定)
+      clearTimeout(sweepTimer)
+      sweepTimer = window.setTimeout(
+        () => (gs.value = closeExpired(gs.value, Date.now())), GROUP_WINDOW_MS + 100)
       marquee.value = [call, ...marquee.value].slice(0, 30)
       window.pywebview?.api?.speak?.(call.announce)
     },
     onRetract: (id) => {
-      cards.value = cards.value.filter(c => c.id !== id)
+      gs.value = onRetract(gs.value, id)
       marquee.value = marquee.value.filter(c => c.id !== id)
     },
   })
@@ -64,10 +71,20 @@ onMounted(async () => {
   }
   connect(classId ?? undefined)
 })
-onUnmounted(() => { ws?.close(); clearInterval(timer) })
+onUnmounted(() => { ws?.close(); clearInterval(timer); clearTimeout(sweepTimer) })
 
+const hero = computed(() => gs.value.groups[0] ?? null)
+const historyGroups = computed(() => gs.value.groups.slice(1))
+// 名字区字号自适应:1 人 12vw / 2-3 人 8vw / 4-6 人 6vw / 7+ 4.5vw
+const sizeClass = computed(() => {
+  const n = hero.value?.calls.length ?? 1
+  if (n <= 1) return 'names-1'
+  if (n <= 3) return 'names-2'
+  if (n <= 6) return 'names-3'
+  return 'names-4'
+})
 // filter(Boolean):message 为空('' .split(',') 得 [''])时不渲染空 chip
-const bigMsg = computed(() => (cards.value[0]?.message || '').split(',').filter(Boolean))
+const bigMsg = computed(() => (hero.value?.calls[0].message || '').split(',').filter(Boolean))
 </script>
 
 <template>
@@ -82,25 +99,44 @@ const bigMsg = computed(() => (cards.value[0]?.message || '').split(',').filter(
       </span>
     </header>
 
-    <!-- 当前叫号 hero 卡 -->
-    <main flex-1 flex="~ col items-center justify-center" gap-6 px-10>
+    <!-- 当前叫号 hero 组卡(一卡多人)+ 历史组栈 -->
+    <main flex-1 flex="~ col items-center justify-center" gap-4 px-10 overflow-hidden>
       <TransitionGroup name="hero">
-        <section v-if="cards[0]" :key="cards[0].id" class="glass-card"
-                 min-w-720px px-16 py-12 flex="~ col items-center" gap-4>
-          <div text-16px style="color: var(--cc-text-3)">请以下同学到</div>
-          <div text="12vw leading-1" font-700>{{ cards[0].student_name }}</div>
-          <div text-24px>{{ cards[0].teacher_name }} · {{ cards[0].office }}</div>
+        <section v-if="hero" :key="hero.id" class="glass-card breathe"
+                 min-w-720px max-w-92vw px-12 py-10 flex="~ col items-center" gap-4>
+          <div text-16px style="color: var(--cc-text-3)">
+            请以下同学到 <b>{{ hero.calls[0].teacher_name }}</b> · {{ hero.calls[0].office }}
+          </div>
+          <div :class="['names', sizeClass]" flex="~ wrap justify-center" style="gap: .4em">
+            <TransitionGroup name="name">
+              <div v-for="(c, i) in hero.calls" :key="c.id" class="name-blk"
+                   :style="{ '--stagger': Math.min(i, 10) }">
+                {{ c.student_name }}
+              </div>
+            </TransitionGroup>
+          </div>
           <div v-if="bigMsg.length" flex="~ wrap justify-center gap-2" mt-2>
             <span v-for="m in bigMsg" :key="m" class="cc-chip" text-16px py-1 px-4>✚ {{ m }}</span>
           </div>
         </section>
       </TransitionGroup>
-      <div v-if="!cards.length" text-18px style="color: var(--cc-text-3)">
+      <div v-if="!gs.groups.length" text-18px style="color: var(--cc-text-3)">
         暂无叫号 · 请留意播报
       </div>
+
+      <!-- 最多 2 个历史组:缩小形态,FLIP 平移 -->
+      <TransitionGroup v-if="historyGroups.length" name="hist"
+                       tag="div" flex="~ col items-center gap-2" mt-1>
+        <div v-for="g in historyGroups" :key="g.id" class="glass-card"
+             px-6 py-2 flex="~ items-center gap-4 wrap" text-14px max-w-90vw>
+          <span style="color: var(--cc-text-3)">{{ g.calls[0].teacher_name }} · {{ g.calls[0].office }}</span>
+          <span font-600>{{ g.calls.map(c => c.student_name).join('、') }}</span>
+          <span v-if="g.calls[0].message" class="cc-chip" text-12px>✚ {{ g.calls[0].message }}</span>
+        </div>
+      </TransitionGroup>
     </main>
 
-    <!-- 走马灯 -->
+    <!-- 走马灯(逐人条目不变) -->
     <footer h-56px flex="~ items-center" overflow-hidden px-10
             style="border-top: 1px solid var(--cc-border)">
       <div class="marquee" flex="~ gap-8" text-15px whitespace-nowrap>
@@ -115,12 +151,56 @@ const bigMsg = computed(() => (cards.value[0]?.message || '').split(',').filter(
 
 <style scoped>
 .hero-enter-active { transition: all var(--cc-dur-slow) var(--cc-ease-overshoot); }
-.hero-enter-from { opacity: 0; transform: translateY(40px) scale(0.96); }
+.hero-enter-from { opacity: 0; transform: translateY(48px) scale(0.94); }
 .hero-leave-active { transition: all var(--cc-dur-fast) ease; position: absolute; }
 .hero-leave-to { opacity: 0; }
+
+/* 当前组卡:6s 呼吸光晕(叠加玻璃卡原有投影) */
+.breathe { animation: breathe 6s ease-in-out infinite; }
+@keyframes breathe {
+  0%, 100% { box-shadow: var(--cc-shadow-1), var(--cc-edge-glow), 0 0 20px 0 var(--cc-theme-40); }
+  50% { box-shadow: var(--cc-shadow-1), var(--cc-edge-glow), 0 0 28px 6px var(--cc-theme-40); }
+}
+
+/* 名字块:blur-in + 缩放弹入,逐块 40ms 阶梯。
+   fill 用 backwards 而非 both:结束后不驻留 keyframe 终态,否则动画帧
+   会压过后续 name-leave/name-move 的 transition(动画优先级高于过渡)。 */
+.name-blk {
+  animation: name-in var(--cc-dur-name) var(--cc-ease-overshoot) backwards;
+  animation-delay: calc(var(--stagger, 0) * 40ms);
+}
+@keyframes name-in {
+  from { opacity: 0; filter: blur(10px); transform: scale(0.85); }
+  to { opacity: 1; filter: blur(0); transform: scale(1); }
+}
+.name-enter-active { transition: all var(--cc-dur-fast) ease; }
+.name-leave-active { transition: all var(--cc-dur-fast) ease; }
+.name-leave-to { opacity: 0; transform: scale(0.8); }
+.name-move { transition: transform var(--cc-dur-cozy) var(--cc-ease-smooth); }
+
+/* 字号自适应(1/2-3/4-6/7+ 人) */
+.names { font-weight: 700; line-height: 1.1; }
+.names-1 { font-size: 12vw; }
+.names-2 { font-size: 8vw; }
+.names-3 { font-size: 6vw; }
+.names-4 { font-size: 4.5vw; }
+
+/* 历史组栈 FLIP */
+.hist-move { transition: transform var(--cc-dur-cozy) var(--cc-ease-smooth); }
+.hist-enter-active { transition: all var(--cc-dur-cozy) var(--cc-ease-smooth); }
+.hist-enter-from { opacity: 0; transform: translateY(12px); }
+.hist-leave-active { transition: all var(--cc-dur-fast) ease; position: absolute; }
+.hist-leave-to { opacity: 0; }
+
 .marquee { animation: scroll 24s linear infinite; }
+/* 老师查历史时悬停暂停 */
+.marquee:hover { animation-play-state: paused; }
 @keyframes scroll {
   from { transform: translateX(100vw); }
   to { transform: translateX(-100%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .breathe, .name-blk { animation: none; }
 }
 </style>

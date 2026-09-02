@@ -17,6 +17,6 @@ const { toasts } = useToast()
 <style scoped>
 .toast-enter-active { transition: all var(--cc-dur-cozy) var(--cc-ease-overshoot); }
 .toast-leave-active { transition: all var(--cc-dur-fast) ease; }
-.toast-enter-from { opacity: 0; transform: translateY(16px) scale(0.95); }
+.toast-enter-from { opacity: 0; transform: translateY(16px) scale(0.95) rotate(-1deg); }
 .toast-leave-to { opacity: 0; transform: translateY(8px); }
 </style>
