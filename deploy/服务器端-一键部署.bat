@@ -2,10 +2,12 @@
 chcp 65001 >nul
 title CallCenter Server Deploy
 set DEST=C:\CallCenter
-set EXE=%~dp0call-center-0.1.4-x64.exe
+rem pick newest call-center-*-x64.exe next to this script (version-agnostic)
+set EXE=
+for /f "delims=" %%F in ('dir /b /o-d "%~dp0call-center-*-x64.exe" 2^>nul') do set EXE=%~dp0%%F
 
 if not exist "%EXE%" (
-  echo [ERROR] call-center-0.1.4-x64.exe not found next to this script.
+  echo [ERROR] no call-center-*-x64.exe found next to this script.
   pause
   exit /b 1
 )
