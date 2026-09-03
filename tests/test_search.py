@@ -9,7 +9,8 @@ def db(tmp_path):
     conn = connect(tmp_path / "call.db")
     init_db(conn)
     conn.execute("INSERT INTO classes(name) VALUES ('高二(3)班')")
-    students = [("梁皓文",), ("李涵文",), ("王小雨",), ("刘昊然",)]
+    students = [("梁皓文",), ("李涵文",), ("王小雨",), ("刘昊然",),
+                ("王佳琪",), ("张嘉琪",), ("李佳琪",), ("贾启明",)]
     conn.executemany(
         "INSERT INTO students(class_id,name,pinyin_full,pinyin_initials) "
         "VALUES (1,?,?,?)",
@@ -36,6 +37,25 @@ def test_full_pinyin_prefix(db):
 
 def test_name_substring(db):
     assert search_students(db, "皓文")[0]["name"] == "梁皓文"
+
+
+def test_full_pinyin_contains(db):
+    """同名拼音全班可查:"jiaqi" 命中所有 佳琪/嘉琪(不论姓氏),
+    同级按逐字拼音序 李li < 王wang < 张zhang(CONTRACTS v1.5)。"""
+    names = [r["name"] for r in search_students(db, "jiaqi")]
+    assert names == ["贾启明", "李佳琪", "王佳琪", "张嘉琪"]
+
+
+def test_prefix_outranks_contains(db):
+    """全拼前缀命中(jiaqiming)排在仅包含命中(wangjiaqi)之前。"""
+    rows = search_students(db, "jiaqi")
+    assert rows[0]["name"] == "贾启明"   # tier 1:全拼前缀
+    assert rows[1]["name"] == "李佳琪"   # tier 2:全拼包含
+
+
+def test_name_substring_still_lowest(db):
+    """汉字子串仍垫底:仅姓名含"佳琪"者命中,拼音命中者不混入。"""
+    assert {r["name"] for r in search_students(db, "佳琪")} == {"王佳琪", "李佳琪"}
 
 
 def test_no_match(db):

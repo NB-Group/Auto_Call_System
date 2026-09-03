@@ -1,4 +1,4 @@
-"""学生搜索:拼音首字母 > 全拼 > 姓名子串(CONTRACTS)。"""
+"""学生搜索:首字母前缀 > 全拼前缀 > 全拼包含 > 姓名子串(CONTRACTS v1.5)。"""
 from pypinyin import Style, lazy_pinyin
 
 
@@ -16,8 +16,10 @@ def _score(q: str, row) -> int | None:
         return 0
     if row["pinyin_full"].startswith(ql):
         return 1
-    if ql in row["name"].lower():
+    if ql in row["pinyin_full"]:
         return 2
+    if ql in row["name"].lower():
+        return 3
     return None
 
 
