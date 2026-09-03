@@ -35,7 +35,10 @@ def create_app(db_path, static_dir=None) -> web.Application:
 
 def _index(static: Path):
     async def handler(request):
-        return web.FileResponse(static / "index.html")
+        # index.html 禁缓存:前端热更新后客户端立刻拿新版本;
+        # /assets/ 文件名带哈希,可长缓存。
+        return web.FileResponse(static / "index.html",
+                                headers={"Cache-Control": "no-store"})
     return handler
 
 
