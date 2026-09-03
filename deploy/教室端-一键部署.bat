@@ -11,6 +11,8 @@ if not exist "%EXE%" (
   pause
   exit /b 1
 )
+rem stop any running instance first: copy over a running exe fails (M2)
+taskkill /F /IM call-center.exe >nul 2>&1
 if not exist "%DEST%" mkdir "%DEST%"
 echo Copying to %DEST% ...
 copy /Y "%EXE%" "%DEST%\call-center.exe" >nul
