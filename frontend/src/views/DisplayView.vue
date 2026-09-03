@@ -92,6 +92,12 @@ onMounted(async () => {
         picked.value = false
         return
       }
+      // id 仍有效时,以服务器最新班名回填(换库/改名后别再亮旧班牌)
+      const fresh = list.find(c => c.id === classId)
+      if (fresh && fresh.name !== className.value) {
+        className.value = fresh.name
+        localStorage.setItem('cc_class_name', fresh.name)
+      }
     } catch { /* 服务器暂不可达:按记忆直连,WS 自带重连 */ }
   }
   connect(classId ?? undefined)
