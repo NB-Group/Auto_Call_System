@@ -21,12 +21,11 @@ DEV_URL = "http://127.0.0.1:5173"
 DISPLAY_W, DISPLAY_H = 400, 250
 DISPLAY_MARGIN = 16
 
-# 平台窗框分叉(Live-test 修复):pywebview 的 JS 拖拽(.pywebview-drag-region)
-# 与 window.move 都是 X11/Win32 机制 —— Wayland 下全是 no-op,frameless 小窗
-# 既拖不动也钉不住角。Linux 交给 WM 系统窗框(原生拖动/缩放,Wayland 可用);
-# Windows(生产)保持 frameless + 自绘栏。页面内拖拽条保留(Windows 生效,
-# Linux 无害 —— customize.js 的 X11 路径不被触发)。
-FRAMELESS = os.name == "nt"
+# 自绘标题栏全平台统一(用户拍板 Linux 也要同款观感):frameless 常开。
+# Wayland 边界:pywebview 的 JS 拖拽(.pywebview-drag-region)与 window.move
+# 是 X11/Win32 机制,Wayland 下 no-op,系统窗框又已让出 —— 移动窗口改用
+# 合成器快捷键 Super+拖拽(KDE/GNOME 均支持);X11/Windows 仍可拖自绘栏。
+FRAMELESS = True
 
 
 def parse_args(argv=None):
@@ -110,8 +109,10 @@ def main():
         # 全屏时仍按 max_size 截留内容(全屏后内容停留 400×250 的元凶之一)。
         # 可缩放则无 max hint,fullscreen() 正常铺满。winforms 全屏走显式
         # SetWindowPos 屏幕尺寸,不受 resizable 影响。
+        # 注意:FRAMELESS 已恒 True(C4),resizable 的平台分叉独立于此保留,
+        # 不能写成 not FRAMELESS,否则 Linux 重新踩回 Wayland 全屏截留坑。
         kwargs = dict(width=DISPLAY_W, height=DISPLAY_H,
-                      resizable=not FRAMELESS, on_top=True)
+                      resizable=os.name != "nt", on_top=True)
         pos = _display_corner_pos()
         if pos is not None:
             kwargs["x"], kwargs["y"] = pos

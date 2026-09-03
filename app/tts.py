@@ -79,9 +79,11 @@ def pick_backend():
 
 
 class TTSService:
-    """队列化播报:每条文本连播 repeat 遍,间隔 gap 秒(spec §5)。"""
+    """队列化播报:每条文本连播 repeat 遍,间隔 gap 秒(spec §5)。
+    repeat 默认 1(一批一念一遍):显示端已按「组窗口关闭时合成一条」播报,
+    双读已按用户反馈移除(逐人×2 遍太慢)。"""
 
-    def __init__(self, backend=None, repeat: int = 2, gap: float = 0.8):
+    def __init__(self, backend=None, repeat: int = 1, gap: float = 0.8):
         self.backend = backend if backend is not None else pick_backend()
         self.repeat, self.gap = repeat, gap
         self._q: queue.Queue[str | None] = queue.Queue()

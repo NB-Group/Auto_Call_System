@@ -9,15 +9,69 @@ from app.config import load_config, save_config
 from app.tts import TTSService, NullBackend
 
 
-def test_frameless_platform_split():
-    """Live-test 修复:Wayland 下 JS 拖拽/定位是 no-op → Linux 走系统窗框。
-    frameless 一律跟随 FRAMELESS 常量(= os.name=='nt'),不得再硬编码 True;
-    否则 Linux/Wayland 上的小窗既拖不动、teacher 窗也没有原生移动条。"""
-    assert main_mod.FRAMELESS == (os.name == "nt")
+def test_frameless_always_on():
+    """C4:自绘标题栏全平台统一 —— FRAMELESS 恒 True,Linux 不再走系统窗框
+    (Wayland 移动窗口改用 Super+拖拽)。frameless 传参一律跟随 FRAMELESS
+    常量,不得再硬编码 True。"""
+    assert main_mod.FRAMELESS is True
     src = inspect.getsource(main_mod)
     assert "frameless=True" not in src, "存在硬编码 frameless=True,应改用 FRAMELESS"
     # create_window 调用点都应显式传 frameless=FRAMELESS(共 5 处:错误/离线/显示/teacher/选角)
     assert src.count("frameless=FRAMELESS") == 5
+    # 显示端 resizable 平台分叉独立保留:Linux 放开(GTK 非 resizable 的
+    # min=max hint 会让部分 Wayland 合成器全屏仍截留 400×250),Windows 固定。
+    assert "resizable=os.name != \"nt\"" in src or "resizable=os.name != 'nt'" in src
+
+
+def test_set_display_mode_bring_up_before_expand(monkeypatch):
+    """C3:expand 前先把窗口拉起 —— restore(取消最小化)→ show(显示+激活)
+    → toggle_fullscreen,顺序固定;collapse 不拉起(纯切换);幂等记账不双切。"""
+    import webview
+
+    ops = []
+
+    class FakeWin:
+        def restore(self):
+            ops.append("restore")
+
+        def show(self):
+            ops.append("show")
+
+        def toggle_fullscreen(self):
+            ops.append("fullscreen")
+
+    monkeypatch.setattr(webview, "windows", [FakeWin()])
+    b = Bridge("display", TTSService(backend=NullBackend(), repeat=1))
+    b.set_display_mode("expand")
+    assert ops == ["restore", "show", "fullscreen"]
+    ops.clear()
+    b.set_display_mode("collapse")
+    assert ops == ["fullscreen"]  # 收回不拉起
+    ops.clear()
+    b.set_display_mode("expand")  # 状态翻转后再展开:完整拉起序列重来
+    assert ops == ["restore", "show", "fullscreen"]
+
+
+def test_set_display_mode_bring_up_failure_tolerant(monkeypatch):
+    """C3 防御:restore 抛错(后端差异)不得挡住 show/fullscreen。"""
+    import webview
+
+    ops = []
+
+    class HalfBrokenWin:
+        def restore(self):
+            raise RuntimeError("backend says no")
+
+        def show(self):
+            ops.append("show")
+
+        def toggle_fullscreen(self):
+            ops.append("fullscreen")
+
+    monkeypatch.setattr(webview, "windows", [HalfBrokenWin()])
+    b = Bridge("display", TTSService(backend=NullBackend(), repeat=1))
+    assert b.set_display_mode("expand") is None
+    assert ops == ["show", "fullscreen"]
 
 
 def test_bridge_surface():

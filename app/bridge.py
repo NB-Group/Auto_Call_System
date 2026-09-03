@@ -29,6 +29,13 @@ class Bridge:
 
         幂等:目标态与当前一致时不碰窗口(toggle 两次会切回去)。非法 mode
         直接忽略,不炸调用方。
+
+        expand 前先把窗口拉起:叫号时显示窗可能被最小化/被别的窗口盖住,
+        只 toggle_fullscreen 会"无感"全屏。pywebview 6.x Window.restore()
+        = 取消最小化(winforms WindowState.Normal / gtk deiconify+present),
+        Window.show() = 显示并激活(winforms Show+Activate);gtk 的 present
+        同样带前置聚焦,无独立 focus API。各后端实现有差异,逐个 try:
+        单步失败只少拉起一招,不挡全屏切换。collapse 不拉起(收回去即可)。
         """
         if mode not in ("expand", "collapse"):
             return None
@@ -36,7 +43,14 @@ class Bridge:
 
         want = mode == "expand"
         if webview.windows and want != self._fullscreen:
-            webview.windows[0].toggle_fullscreen()
+            win = webview.windows[0]
+            if want:
+                for bring_up in (win.restore, win.show):
+                    try:
+                        bring_up()
+                    except Exception:
+                        pass
+            win.toggle_fullscreen()
             self._fullscreen = want
         return None
 

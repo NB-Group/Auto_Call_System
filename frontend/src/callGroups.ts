@@ -75,6 +75,20 @@ export function closeExpired(
   }
 }
 
+/**
+ * 一批一念(用户拍板:同批一起念一遍,不逐人念两遍):整组合成单条播报文本。
+ * "请甲、乙、丙同学到郑老师203办公室,订正数学作业" —— 名字按进组顺序顿号
+ * 连接;师/办公室/消息取首条(同组三要素本就相同),消息只念一次。
+ * 格式镜像 teachers.default_template 默认值"请{student}同学到{teacher}{office}"
+ * (server/api.py announce 尾部 ,message 同构)。
+ */
+export function groupAnnounce(g: CallGroup): string {
+  const first = g.calls[0]
+  const names = g.calls.map(c => c.student_name).join('、')
+  return `请${names}同学到${first.teacher_name}${first.office}`
+    + (first.message ? `,${first.message}` : '')
+}
+
 const ts = (c: CallItem) => new Date(c.created_at.replace(' ', 'T')).getTime()
 
 /**

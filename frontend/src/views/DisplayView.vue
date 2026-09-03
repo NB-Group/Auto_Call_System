@@ -4,7 +4,7 @@ import { api, type CallItem } from '../api'
 import { connectWS } from '../ws'
 import ClassPicker from '../components/ClassPicker.vue'
 import { useDark } from '../composables/useDark'
-import { GROUP_WINDOW_MS, closeExpired, initGroups, onCall as onGroupCallRaw, onRetract, type GroupsState } from '../callGroups'
+import { GROUP_WINDOW_MS, closeExpired, groupAnnounce, initGroups, onCall as onGroupCallRaw, onRetract, type GroupsState } from '../callGroups'
 import { autoCollapse, initDisplayMode, onGroupCall as onModeCall, onGroupsEmpty, toggleManual, type DisplayModeState } from '../displayMode'
 
 const { forceDark } = useDark()
@@ -17,9 +17,18 @@ const online = ref(false)
 const clock = ref('')
 // Task-23 小窗形态:右下角常驻,来号自动全屏,末组结束 12s 自动收回
 const dm = ref<DisplayModeState>(initDisplayMode())
+// C2 语音播报开关:默认开,localStorage 持久化('0'=关)
+const voiceOn = ref(localStorage.getItem('cc_voice') !== '0')
+// 一批一念:已播报过的组 id(只念一遍的闸门);仅存栈内组,栈深 3 无泄漏
+const spokenGroups = new Set<number>()
 let ws: ReturnType<typeof connectWS> | null = null
 let timer: number | undefined
 let sweepTimer: number | undefined
+
+function toggleVoice() {
+  voiceOn.value = !voiceOn.value
+  localStorage.setItem('cc_voice', voiceOn.value ? '1' : '0')
+}
 
 /** 形态状态唯一出口:expanded 变化才调 bridge(浏览器环境可选链无副作用) */
 function syncMode(next: DisplayModeState) {
@@ -49,14 +58,26 @@ function connect(sub?: number) {
     // 突发聚合:老师端循环 N 次 call → 服务端连发 N 条广播,同师同消息 1.2s 内聚一卡
     onCall: (call) => {
       gs.value = onGroupCallRaw(gs.value, call, Date.now())
-      // 来号即展开(冷却期内新组也取消收起计时)
+      // 来号即展开(冷却期内新组也取消收起计时);卡面立即可见,语音在窗关时才念
       syncMode(onModeCall(dm.value))
-      // 兜底清窗旗(时间检查本身会拦,这里只是让 closed 状态落定)
+      // 兜底清窗旗 + 一批一念:窗口落定(末次叫号后 1.2s)整组合成一条播报,
+      // 只念一遍(此前逐人念、TTS 再×2 遍,慢 —— 用户拍板一批一念)。
+      // 计时器随每次叫号重排:不续叫就到此点,所有到期组在此落定。
       clearTimeout(sweepTimer)
-      sweepTimer = window.setTimeout(
-        () => { gs.value = closeExpired(gs.value, Date.now()); anchorEmpty() }, GROUP_WINDOW_MS + 100)
+      sweepTimer = window.setTimeout(() => {
+        gs.value = closeExpired(gs.value, Date.now())
+        // 新关组播报:按叫号先后念(栈新在前,倒序=时间正序);spokenGroups 保证每组只念一次
+        for (const g of [...gs.value.groups].reverse()) {
+          if (g.closed && !spokenGroups.has(g.id)) {
+            spokenGroups.add(g.id)
+            if (voiceOn.value) window.pywebview?.api?.speak?.(groupAnnounce(g))
+          }
+        }
+        for (const id of [...spokenGroups])
+          if (!gs.value.groups.some(g => g.id === id)) spokenGroups.delete(id)
+        anchorEmpty()
+      }, GROUP_WINDOW_MS + 100)
       marquee.value = [call, ...marquee.value].slice(0, 30)
-      window.pywebview?.api?.speak?.(call.announce)
     },
     onRetract: (id) => {
       gs.value = onRetract(gs.value, id)
@@ -150,10 +171,18 @@ const calledCount = computed(() => marquee.value.length)
           </div>
           <div v-else text-14px class="idle-hint" style="color: var(--cc-text-3)">暂无叫号 · 请留意播报</div>
         </div>
-        <!-- 底行:一键全屏 + 今日计数 -->
+        <!-- 底行:一键全屏 + 播报开关 + 今日计数 -->
         <div flex="~ items-center justify-between" px-14px pb-10px>
-          <button class="cc-btn" text-13px py-1 px-3
-                  @mousedown.stop @click="syncMode(toggleManual(dm))">⛶ 全屏</button>
+          <div flex="~ items-center gap-6px">
+            <button class="cc-btn" text-13px py-1 px-3
+                    @mousedown.stop @click="syncMode(toggleManual(dm))">⛶ 全屏</button>
+            <button class="cc-btn" text-13px py-1 px-3
+                    :title="voiceOn ? '关闭语音播报' : '开启语音播报'"
+                    @mousedown.stop @click="toggleVoice">
+              <span :key="String(voiceOn)" class="voice-ico">{{ voiceOn ? '🔊' : '🔇' }}</span>
+              播报 {{ voiceOn ? '开' : '关' }}
+            </button>
+          </div>
           <span text-12px style="color: var(--cc-text-3)">今日已叫 {{ calledCount }} 人</span>
         </div>
       </div>
@@ -162,9 +191,17 @@ const calledCount = computed(() => marquee.value.length)
            fixed inset-0:脱离祖先高度链(App.vue 无栏路由的包裹 div 高度 auto,
            h-full 百分比会塌陷成内容高),直接锚定视口全幅,任何窗口尺寸都撑满 -->
       <div v-else key="full" fixed inset-0 flex="~ col" overflow-hidden>
-        <!-- 悬浮退出钮(kiosk 顶右,唯一控件) -->
-        <button class="glass-pop exit-fs" fixed top-16px right-16px z-30
-                text-14px py-2 px-4 @mousedown.stop @click="syncMode(toggleManual(dm))">⤡ 退出全屏</button>
+        <!-- 悬浮控件(kiosk 顶右):播报开关 + 退出钮 -->
+        <div fixed top-16px right-16px z-30 flex="~ items-center gap-8px">
+          <button class="glass-pop voice-fs" text-14px py-2 px-4
+                  :title="voiceOn ? '关闭语音播报' : '开启语音播报'"
+                  @mousedown.stop @click="toggleVoice">
+            <span :key="String(voiceOn)" class="voice-ico">{{ voiceOn ? '🔊' : '🔇' }}</span>
+            播报 {{ voiceOn ? '开' : '关' }}
+          </button>
+          <button class="glass-pop exit-fs" text-14px py-2 px-4
+                  @mousedown.stop @click="syncMode(toggleManual(dm))">⤡ 退出全屏</button>
+        </div>
         <!-- 顶栏:班级+时钟+状态 -->
         <header flex="~ items-center" justify-between px-10 py-6>
           <span text-20px font-600>{{ className }}</span>
@@ -269,6 +306,24 @@ const calledCount = computed(() => marquee.value.length)
 }
 .exit-fs:hover { opacity: 1; transform: scale(1.05); box-shadow: var(--cc-shadow-2); }
 
+/* 播报开关(小窗+全屏共用):图标每次切换重挂载弹跳一下(:key 翻转) */
+.voice-fs {
+  border: 1px solid var(--cc-border);
+  color: var(--cc-text-2);
+  cursor: pointer;
+  transition: opacity var(--cc-dur-fast) var(--cc-ease-smooth),
+    transform var(--cc-dur-fast) var(--cc-ease-overshoot);
+}
+.voice-fs:hover { transform: scale(1.05); }
+.voice-ico {
+  display: inline-block;
+  animation: voice-pop var(--cc-dur-cozy) var(--cc-ease-overshoot);
+}
+@keyframes voice-pop {
+  from { opacity: 0; transform: scale(0.4) rotate(-14deg); }
+  to { opacity: 1; transform: none; }
+}
+
 .hero-enter-active { transition: all var(--cc-dur-slow) var(--cc-ease-overshoot); }
 .hero-enter-from { opacity: 0; transform: translateY(48px) scale(0.94); }
 .hero-leave-active { transition: all var(--cc-dur-fast) ease; position: absolute; }
@@ -371,7 +426,7 @@ const calledCount = computed(() => marquee.value.length)
 
 @media (prefers-reduced-motion: reduce) {
   .breathe, .name-blk, .colon, .idle-hint, .settle, .msg-in,
-  .hero-card::after { animation: none; }
+  .voice-ico, .hero-card::after { animation: none; }
   .mode-enter-active, .mode-leave-active { transition: none; }
 }
 </style>

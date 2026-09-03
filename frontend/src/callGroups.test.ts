@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { closeExpired, groupCalls, initGroups, onCall, onRetract } from './callGroups'
+import { closeExpired, groupAnnounce, groupCalls, initGroups, onCall, onRetract } from './callGroups'
 import type { CallItem } from './api'
 
 let nid = 1
@@ -96,6 +96,35 @@ describe('callGroups 显示端突发聚合', () => {
     expect(s.groups[0].closed).toBe(true)
     s = onCall(s, C({ student_name: '乙' }), 1300) // closed 旗标拦截
     expect(s.groups.length).toBe(2)
+  })
+})
+
+describe('groupAnnounce 一批一念(播报合并)', () => {
+  it('多人组:名字顿号连接,消息只念一次', () => {
+    let s = initGroups()
+    s = onCall(s, C({ student_name: '梁皓文' }), 0)
+    s = onCall(s, C({ student_name: '李涵文' }), 300)
+    s = onCall(s, C({ student_name: '刘昊然' }), 900)
+    expect(groupAnnounce(s.groups[0]))
+      .toBe('请梁皓文、李涵文、刘昊然同学到郑老师203办公室,订正数学作业')
+  })
+
+  it('单人组:与服务器原单条 announce 逐字一致(默认模板渲染结果)', () => {
+    const s = onCall(initGroups(), C({
+      announce: '请梁皓文同学到郑老师203办公室,订正数学作业',
+    }), 0)
+    expect(groupAnnounce(s.groups[0])).toBe(s.groups[0].calls[0].announce)
+  })
+
+  it('无消息:不加尾部逗号', () => {
+    const s = onCall(initGroups(), C({ message: '' }), 0)
+    expect(groupAnnounce(s.groups[0])).toBe('请梁皓文同学到郑老师203办公室')
+  })
+
+  it('多词消息(逗号分隔)整段保留,只出现一次', () => {
+    const s = onCall(initGroups(), C({ message: '订正数学作业,带圆规' }), 0)
+    expect(groupAnnounce(s.groups[0]))
+      .toBe('请梁皓文同学到郑老师203办公室,订正数学作业,带圆规')
   })
 })
 
