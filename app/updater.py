@@ -13,7 +13,7 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from app.config import base_dir, load_config
+from app.config import base_dir, load_config, original_exe_path
 
 DEFAULT_MIRRORS = [
     "",  # 直连
@@ -153,7 +153,11 @@ def install_pending() -> bool:
     pending = UPDATE_DIR / "pending.exe"
     if not pending.exists():
         return False
-    exe = Path(sys.executable)
+    # 换新目标 = 部署位 exe。onefile 下 sys.executable 是临时解包 exe
+    # (用后即焚),改它毫无意义;拿不到部署位时宁可跳过本次也不乱改。
+    exe = original_exe_path()
+    if exe is None:
+        return False
     old = exe.with_suffix(".old")
     try:
         if old.exists():

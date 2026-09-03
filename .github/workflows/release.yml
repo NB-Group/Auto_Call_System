@@ -26,9 +26,25 @@ jobs:
             --windows-console-mode=disable `
             --windows-icon-from-ico=assets/icon.ico `
             --include-package=win32com --include-package=win32 --include-module=pythoncom `
+            --include-package-data=pypinyin `
             --include-data-dir=server/static=server/static `
             --output-filename="call-center-$v-x64.exe" `
             --output-dir=dist app/main.py
+
+      - name: Smoke test exe (server role, no GUI)
+        shell: pwsh
+        run: |
+          $v = "${{ github.ref_name }}" -replace '^v',''
+          $exe = Resolve-Path "dist/call-center-$v-x64.exe"
+          $marker = "$PWD/smoke-marker.txt"
+          $env:CC_SMOKE_OUT = $marker
+          # GUI 子系统 exe 用 & 调用不等待,必须 Start-Process -Wait;
+          # 冒烟路径不碰 webview,无桌面也能跑(v0.1.5 学校机事故回归闸)。
+          $p = Start-Process -FilePath $exe -ArgumentList "--smoke-server" -Wait -PassThru
+          if (-not (Test-Path $marker)) {
+            throw "smoke failed: marker missing, exit=$($p.ExitCode)"
+          }
+          Get-Content $marker
 
       - name: Manifest and release
         shell: pwsh

@@ -40,8 +40,14 @@ jobs:
       - run: python scripts/prepare_frontend.py
       - run: |
           python -m nuitka --onefile --assume-yes-for-downloads \
+            --include-package-data=pypinyin \
             --include-data-dir=server/static=server/static \
             --output-dir=dist app/main.py
+      - name: Smoke test exe (server role, no GUI)
+        run: |
+          export CC_SMOKE_OUT="$PWD/smoke-marker.txt"
+          timeout 120 ./dist/main.bin --smoke-server
+          cat smoke-marker.txt
       - uses: actions/upload-artifact@v4
         with: { name: linux-smoke, path: dist/main.bin }
         if: always()

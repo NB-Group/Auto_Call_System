@@ -78,7 +78,8 @@ def test_bridge_surface():
     svc = TTSService(backend=NullBackend(), repeat=1)
     b = Bridge("display", svc)
     assert b.get_role() == "display"
-    assert b.app_version() == "0.1.5"
+    from app import __version__
+    assert b.app_version() == __version__  # 跟随 app/__init__,升版免改
     assert b.speak("测试") is None
     assert b.fullscreen(True) is None
     assert b.quit() is None

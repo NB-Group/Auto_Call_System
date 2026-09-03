@@ -156,10 +156,50 @@ def test_install_pending_swaps_exe(tmp_path, monkeypatch):
     pending_dir.mkdir(parents=True)
     (pending_dir / "pending.exe").write_bytes(b"new")
     monkeypatch.setattr("sys.frozen", True, raising=False)
-    monkeypatch.setattr("sys.executable", str(exe))
+    monkeypatch.setattr("sys.argv", [str(exe)])
     assert install_pending() is True
     assert exe.read_bytes() == b"new"
     assert (tmp_path / "app.old").read_bytes() == b"old"
+
+
+def test_install_pending_targets_deployed_exe_not_temp(tmp_path, monkeypatch):
+    """onefile 场景(v0.1.6 修复):sys.executable 是临时解包 exe,部署位
+    在 sys.argv[0]。换新必须换部署位 —— 改临时 exe 等于白改,新版永远
+    装不上,客户端每次启动重下载,更新死循环。"""
+    monkeypatch.chdir(tmp_path)
+    deployed = tmp_path / "call-center.exe"
+    deployed.write_bytes(b"old")
+    temp_exe = tmp_path / "onefile_tmp" / "call-center.exe"
+    temp_exe.parent.mkdir()
+    temp_exe.write_bytes(b"temp-old")
+    pending_dir = tmp_path / "data" / "updates"
+    pending_dir.mkdir(parents=True)
+    (pending_dir / "pending.exe").write_bytes(b"new")
+    monkeypatch.setattr("sys.frozen", True, raising=False)
+    monkeypatch.setattr("sys.executable", str(temp_exe))
+    monkeypatch.setattr("sys.argv", [str(deployed)])
+    assert install_pending() is True
+    assert deployed.read_bytes() == b"new"          # 换的是部署位
+    assert temp_exe.read_bytes() == b"temp-old"      # 临时 exe 未被碰
+    assert (tmp_path / "call-center.old").read_bytes() == b"old"
+
+
+def test_install_pending_bails_without_deployed_exe(tmp_path, monkeypatch):
+    """argv[0] 不是可信 exe 路径时放弃换新,不得回退去改临时 exe。"""
+    monkeypatch.chdir(tmp_path)
+    pending_dir = tmp_path / "data" / "updates"
+    pending_dir.mkdir(parents=True)
+    (pending_dir / "pending.exe").write_bytes(b"new")
+    temp_exe = tmp_path / "onefile_tmp" / "call-center.exe"
+    temp_exe.parent.mkdir()
+    temp_exe.write_bytes(b"temp-old")
+    monkeypatch.setattr("sys.frozen", True, raising=False)
+    monkeypatch.setattr("sys.executable", str(temp_exe))
+    # onefile 下 argv[0] 恒为部署位(Nuitka 保证);argv[0] 非可信 exe 时
+    # 必须直接放弃,绝不能回退 sys.executable 去改临时解包 exe。
+    monkeypatch.setattr("sys.argv", ["not-an-exe.py"])
+    assert install_pending() is False
+    assert temp_exe.read_bytes() == b"temp-old"
 
 
 def test_manifest_non_dict_ignored(manifest):
@@ -199,7 +239,7 @@ def test_install_pending_rollback(tmp_path, monkeypatch):
     pending_dir.mkdir(parents=True)
     (pending_dir / "pending.exe").write_bytes(b"new")
     monkeypatch.setattr("sys.frozen", True, raising=False)
-    monkeypatch.setattr("sys.executable", str(exe))
+    monkeypatch.setattr("sys.argv", [str(exe)])
 
     def boom(src, dst):
         raise OSError("disk full")

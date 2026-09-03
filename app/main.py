@@ -6,6 +6,7 @@ import sys
 import threading
 import time
 import traceback
+from pathlib import Path
 
 import webview
 
@@ -35,6 +36,8 @@ def parse_args(argv=None):
     p.add_argument("--dev", action="store_true", help="加载 vite dev server")
     p.add_argument("--server-url", default=None,
                    help="跳过发现,直连服务器(如 http://10.1.2.3:8800)")
+    p.add_argument("--smoke-server", action="store_true",
+                   help="CI 冒烟:只验证服务器能起(打包完整性),即退")
     return p.parse_args(argv)
 
 
@@ -49,6 +52,8 @@ def resolve_server_url(arg_url, dev):
 
 def main():
     args = parse_args()
+    if args.smoke_server:
+        return _smoke_server()
     cfg = load_config()
     role = args.role if args.role != "auto" else cfg.get("role")
     if role not in ("server", "teacher", "display"):
@@ -129,6 +134,24 @@ def main():
                          daemon=True).start()
     _start_gui()
     tts.stop()
+
+
+def _smoke_server() -> None:
+    """CI 冒烟:真实走一遍 start_server(完整覆盖冻结打包下的导入链 ——
+    2026-09-04 事故:pypinyin 词典 json 未入包,只有 server 角色在启动
+    时 import 它,teacher/display 全正常,CI 源码测试永远测不出)。
+
+    起得来即成功:写标记文件(CC_SMOKE_OUT 指定路径)退出,不碰 GUI
+    ——无桌面环境也能跑。控制台被禁的 exe 里 print 无人接收,标记文件
+    才是 CI 可判定的信号。
+    """
+    from server.serve import start_server, stop_server
+    runner, _t, bcast, loop = start_server(static_dir=None)
+    print("SMOKE-OK", flush=True)
+    out = os.environ.get("CC_SMOKE_OUT")
+    if out:
+        Path(out).write_text("ok", encoding="ascii")
+    stop_server(runner, loop, bcast)
 
 
 def _display_corner_pos():
