@@ -32,6 +32,7 @@ export type PaletteEvent =
   | { t: 'tab' }
   | { t: 'esc' }
   | { t: 'sent' }
+  | { t: 'clear' }
 
 export const initial: PaletteState = {
   phase: 'student', query: '', picked: [], students: [], chips: [],
@@ -79,6 +80,10 @@ export function reduce(
         return { state: { ...s, chips: [] }, effect: null }
       return { state: { ...initial }, effect: null }
     case 'sent':
+      return { state: { ...initial }, effect: null }
+    // B3 一键清空(Ctrl+L):query/chips/picks 全清、退回选生阶段。
+    // 与 esc 不同:esc 在拼装阶段先只弹 chips(渐进退出),clear 是无条件全清。
+    case 'clear':
       return { state: { ...initial }, effect: null }
   }
 }
@@ -148,4 +153,31 @@ function onEnter(
       snippetIds: s.chips.map(c => c.id), freeText: '',
     },
   }
+}
+
+// keydown → 面板动作的纯映射(Palette.vue 用,单测直接打这里)。
+// null = 不认(含 IME 组合期),原样放行给输入框/输入法。
+// Ctrl+L 必须排在其余分支之前判定:裸 'l' 是要进 query 的输入字符,
+// 唯一区分是 ctrlKey —— guard 顺序错了 'l' 就会被当输入或反过来误清空。
+export type KeyPlanKind =
+  | 'clear' | 'down' | 'up' | 'enter' | 'space' | 'tab' | 'esc' | 'backspace'
+
+export function planKeydown(ev: {
+  key: string
+  ctrlKey?: boolean
+  isComposing?: boolean
+  keyCode?: number
+}): { kind: KeyPlanKind } | null {
+  if (ev.isComposing || ev.keyCode === 229) return null
+  if (ev.ctrlKey && (ev.key === 'l' || ev.key === 'L')) return { kind: 'clear' }
+  switch (ev.key) {
+    case 'ArrowDown': return { kind: 'down' }
+    case 'ArrowUp': return { kind: 'up' }
+    case 'Enter': return { kind: 'enter' }
+    case ' ': return { kind: 'space' }
+    case 'Tab': return { kind: 'tab' }
+    case 'Escape': return { kind: 'esc' }
+    case 'Backspace': return { kind: 'backspace' }
+  }
+  return null
 }

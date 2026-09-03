@@ -5,6 +5,12 @@ import { api, token } from '../api'
 defineProps<{ name: string; office: string }>()
 const router = useRouter()
 
+// B1:短语/资料曾用 <router-link>(渲染为 <a href="#/…">),真机 pywebview GTK
+// 上报点不动。jsdom 整链测试(Dock.test.ts)与 WebKitGTK 真窗探针
+// (scripts/diag_b1_dock_click.py:elementFromPoint 命中自身、合成点击全链通)
+// 均复现不了 —— 真凶更可能是窗口长跑期间 dist 重建、旧 chunk 名 404 导致
+// 路由静默中止(重开窗已验证正常)。防御性收敛:弃 anchor 走 button +
+// router.push,绕开 WebView 里 <a> 默认动作的一切怪癖,行为与「退出」钮一致。
 async function logout() {
   try { await api.logout() } catch { /* 忽略 */ }
   token.clear()
@@ -19,8 +25,8 @@ async function logout() {
       <b>{{ name }}</b>
       <span text-13px style="color: var(--cc-text-3)">{{ office }}</span>
     </div>
-    <router-link to="/snippets" class="cc-btn" style="text-decoration:none">短语</router-link>
-    <router-link to="/profile" class="cc-btn" style="text-decoration:none">资料</router-link>
+    <button class="cc-btn" @click="router.push('/snippets')">短语</button>
+    <button class="cc-btn" @click="router.push('/profile')">资料</button>
     <button class="cc-btn" @click="logout">退出</button>
   </header>
 </template>

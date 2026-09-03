@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { api, type Snippet, type StudentHit } from '../api'
-import { initial, reduce, type PaletteState, type SendEffect } from '../palette'
+import { initial, planKeydown, reduce, type PaletteState, type SendEffect } from '../palette'
 import { useToast } from '../composables/useToast'
 
 const emit = defineEmits<{ sent: [] }>()
@@ -72,25 +72,29 @@ function pick(i: number) {
 }
 
 function onKeydown(ev: KeyboardEvent) {
-  // IME 组合期(Windows 中文输入法:isComposing / Process / keyCode 229)
-  // 一律放行给输入法 —— 此时 Enter/方向键/Backspace 都属于选字操作,不是控制键。
-  if (ev.isComposing || ev.keyCode === 229) return
-  if (ev.key === 'ArrowDown') { dispatch({ t: 'down' }); ev.preventDefault() }
-  else if (ev.key === 'ArrowUp') { dispatch({ t: 'up' }); ev.preventDefault() }
-  else if (ev.key === 'Enter') {
-    dispatch({ t: 'enter', students: students.value, snippets: snippets.value })
-    ev.preventDefault()
-  }
-  else if (ev.key === ' ') {
-    // 选生阶段空格 = 多选;拼装阶段空格是自由文本的一部分,放行
-    if (state.value.phase === 'student') {
-      dispatch({ t: 'space', students: students.value })
+  // 映射纯函数在 palette.ts(planKeydown):IME 组合期放行、Ctrl+L 清空
+  // 先于其余分支判定 —— 见其注释(guard 顺序说明)。这里只按 plan 派发。
+  const plan = planKeydown(ev)
+  if (!plan) return
+  switch (plan.kind) {
+    case 'clear': dispatch({ t: 'clear' }); ev.preventDefault(); return
+    case 'down': dispatch({ t: 'down' }); ev.preventDefault(); return
+    case 'up': dispatch({ t: 'up' }); ev.preventDefault(); return
+    case 'enter':
+      dispatch({ t: 'enter', students: students.value, snippets: snippets.value })
       ev.preventDefault()
-    }
+      return
+    case 'space':
+      // 选生阶段空格 = 多选;拼装阶段空格是自由文本的一部分,放行
+      if (state.value.phase === 'student') {
+        dispatch({ t: 'space', students: students.value })
+        ev.preventDefault()
+      }
+      return
+    case 'tab': dispatch({ t: 'tab' }); ev.preventDefault(); return
+    case 'esc': dispatch({ t: 'esc' }); return
+    case 'backspace': dispatch({ t: 'backspace' }); return
   }
-  else if (ev.key === 'Tab') { dispatch({ t: 'tab' }); ev.preventDefault() }
-  else if (ev.key === 'Escape') dispatch({ t: 'esc' })
-  else if (ev.key === 'Backspace') dispatch({ t: 'backspace' })
 }
 
 // 文本输入走 input 事件而非 keydown(keydown 在 IME 下拿不到拼音串)。
@@ -112,9 +116,9 @@ onMounted(() => inputEl.value?.focus())
 
 const PLACEHOLDER = computed(() =>
   state.value.phase === 'student'
-    ? '输入姓名或拼音(如 lhw),空格多选…'
+    ? '输入姓名或拼音(如 lhw),空格多选 · Ctrl+L 清空…'
     : state.value.freeText ? '自由输入附加消息,回车发送…'
-    : '选短语(如 dz)回车挂载 · Tab 自由输入 · 直接回车发送')
+    : '选短语(如 dz)回车挂载 · Tab 自由输入 · Ctrl+L 清空')
 </script>
 
 <template>

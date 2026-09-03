@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { initial, reduce } from './palette'
+import { initial, planKeydown, reduce } from './palette'
 import type { PaletteState } from './palette'
 
 const S = { id: 1, name: '梁皓文', class_name: '高二(3)班', pinyin_initials: 'lhw' }
@@ -136,5 +136,53 @@ describe('palette 状态机', () => {
     // set 同时重置高亮,且不触发发送
     st = reduce({ ...st, activeIndex: 3 }, { t: 'set', query: 'xy' }).state
     expect(st.activeIndex).toBe(0)
+  })
+
+  it('B3 clear:从任意脏状态一键全清(query/chips/students/picked),回选生阶段', () => {
+    const dirty: PaletteState = {
+      phase: 'compose', students: [S, S2], chips: [SN], query: 'd',
+      freeText: true, activeIndex: 3, picked: [],
+    }
+    const { state, effect } = reduce(dirty, { t: 'clear' })
+    expect(state).toEqual(initial)
+    expect(effect).toBeNull()
+    // 选生阶段的 query + picked 同样全清
+    let st = reduce(initial, { t: 'type', ch: 'l' }).state
+    st = reduce(st, { t: 'space', students: [S] }).state
+    st = reduce(st, { t: 'clear' }).state
+    expect(st).toEqual(initial)
+    expect(st.picked).toEqual([])
+    expect(st.query).toBe('')
+  })
+
+  it('B3 clear 与 esc 语义不同:esc 在拼装阶段先只弹 chips,clear 无条件全清', () => {
+    const compose: PaletteState = { ...initial, phase: 'compose', students: [S], chips: [SN] }
+    expect(reduce(compose, { t: 'esc' }).state.chips).toEqual([]) // 渐进退出
+    expect(reduce(compose, { t: 'esc' }).state.phase).toBe('compose')
+    expect(reduce(compose, { t: 'clear' }).state).toEqual(initial) // 一步到位
+  })
+
+  it('B3 planKeydown:Ctrl+L 映射 clear,裸 l 放行(不吞输入)', () => {
+    expect(planKeydown({ key: 'l', ctrlKey: true })).toEqual({ kind: 'clear' })
+    expect(planKeydown({ key: 'L', ctrlKey: true })).toEqual({ kind: 'clear' })
+    expect(planKeydown({ key: 'l' })).toBeNull()
+    expect(planKeydown({ key: 'l', ctrlKey: false })).toBeNull()
+  })
+
+  it('B3 planKeydown:IME 组合期一律放行(含组合期 Ctrl+L)', () => {
+    expect(planKeydown({ key: 'Enter', isComposing: true })).toBeNull()
+    expect(planKeydown({ key: 'Enter', keyCode: 229 })).toBeNull()
+    expect(planKeydown({ key: 'l', ctrlKey: true, isComposing: true })).toBeNull()
+  })
+
+  it('B3 planKeydown:其余按键映射不回归(Esc 仍走 esc 语义)', () => {
+    expect(planKeydown({ key: 'Escape' })).toEqual({ kind: 'esc' })
+    expect(planKeydown({ key: 'ArrowDown' })).toEqual({ kind: 'down' })
+    expect(planKeydown({ key: 'ArrowUp' })).toEqual({ kind: 'up' })
+    expect(planKeydown({ key: 'Enter' })).toEqual({ kind: 'enter' })
+    expect(planKeydown({ key: ' ' })).toEqual({ kind: 'space' })
+    expect(planKeydown({ key: 'Tab' })).toEqual({ kind: 'tab' })
+    expect(planKeydown({ key: 'Backspace' })).toEqual({ kind: 'backspace' })
+    expect(planKeydown({ key: 'x' })).toBeNull()
   })
 })
