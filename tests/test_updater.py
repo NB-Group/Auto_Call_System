@@ -248,3 +248,22 @@ def test_install_pending_rollback(tmp_path, monkeypatch):
     assert install_pending() is False
     assert exe.read_bytes() == b"old"  # 已回滚
     assert not (tmp_path / "app.old").exists()  # .old 被 rename 回去,不留半态
+
+
+def test_fetch_falls_back_when_system_proxy_dead(manifest, monkeypatch):
+    """死系统代理降级:.50 实证(注册表 ProxyEnable→127.0.0.1:7897 已关,
+    urllib 读注册表全 ConnectionRefused)。代理指到死端口时,_fetch 必须
+    仍能直连取回(空 ProxyHandler 兜底),不能让更新整链静默失败。"""
+    from app.updater import _fetch
+
+    a, ra, la = serve(manifest)
+    monkeypatch.setenv("http_proxy", "http://127.0.0.1:9")   # 9=discard,秒拒
+    monkeypatch.setenv("https_proxy", "http://127.0.0.1:9")
+    monkeypatch.delenv("no_proxy", raising=False)
+    monkeypatch.delenv("NO_PROXY", raising=False)
+    try:
+        data = _fetch(a + "releases/latest/download/latest.json",
+                      timeout=2.0)  # 桩的裸路由;a 带尾斜杠,勿双杠
+    finally:
+        stop(ra, la)
+    assert data is not None and json.loads(data)["version"] == "0.2.0"

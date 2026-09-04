@@ -50,13 +50,26 @@ def _asset_url(mirror: str, repo: str, version: str, asset: str) -> str:
             f"/releases/download/v{version}/{asset}")
 
 
+# 无代理 opener:系统代理(注册表/环境变量)死掉时的降级通道。
+# 2026-09-04 .50 实证:机器残留 ProxyEnable=1 → 127.0.0.1:7897(本机
+# 代理已关),urllib 读注册表代理 → 全部 ConnectionRefused → 自更新
+# 静默失败(吞错设计)。空 ProxyHandler = 完全直连;国内镜像 CDN
+# 直连通常可达,这条路能把更新救回来。
+_DIRECT_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+
 def _fetch(url: str, timeout: float, limit: int | None = None) -> bytes | None:
-    try:
-        with urllib.request.urlopen(url, timeout=timeout) as r:
-            # limit=None 全量读(清单);资产按 manifest size 截断,防被代理灌超量字节
-            return r.read() if limit is None else r.read(limit)
-    except Exception:
-        return None
+    for opener in (None, _DIRECT_OPENER):  # 先系统代理,失败降级直连
+        try:
+            r = (urllib.request.urlopen(url, timeout=timeout) if opener is None
+                 else opener.open(url, timeout=timeout))
+            with r:
+                # limit=None 全量读(清单);资产按 manifest size 截断,
+                # 防被代理灌超量字节
+                return r.read() if limit is None else r.read(limit)
+        except Exception:
+            continue
+    return None
 
 
 def fetch_manifests(repo: str, mirrors: list[str] | None = None,
