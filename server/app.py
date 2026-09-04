@@ -46,7 +46,9 @@ def _setup_auth_routes(router):
     from server.auth import resolve_token, verify_password
 
     async def login(request):
-        body = await request.json()
+        body = await api.json_body(request)
+        if body is None:
+            return web.json_response({"error": "bad_request"}, status=400)
         row = request.app["db"].execute(
             "SELECT * FROM teachers WHERE username=? AND disabled=0",
             (body.get("username", ""),)).fetchone()
@@ -77,7 +79,9 @@ def _setup_public_routes(router):
             "SELECT COUNT(*) FROM teachers WHERE role='admin'").fetchone()[0]
         if n > 0:
             return web.json_response({"error": "conflict"}, status=409)
-        body = await request.json()
+        body = await api.json_body(request)
+        if body is None:
+            return web.json_response({"error": "bad_request"}, status=400)
         username, password = body.get("username", ""), body.get("password", "")
         if not username or len(password) < 6:
             return web.json_response({"error": "bad_request"}, status=400)
@@ -120,7 +124,9 @@ def _setup_admin_routes(router):
     async def add_teacher(request):
         if (r := admin_guard(request)):
             return r
-        body = await request.json()
+        body = await api.json_body(request)
+        if body is None:
+            return web.json_response({"error": "bad_request"}, status=400)
         if not body.get("username") or len(body.get("password", "")) < 6:
             return web.json_response({"error": "bad_request"}, status=400)
         if body.get("role", "teacher") not in ("teacher", "admin"):
@@ -140,7 +146,9 @@ def _setup_admin_routes(router):
     async def update_teacher(request):
         if (r := admin_guard(request)):
             return r
-        body = await request.json()
+        body = await api.json_body(request)
+        if body is None:
+            return web.json_response({"error": "bad_request"}, status=400)
         tid = int(request.match_info["id"])
         # 停用自己 → 唯一管理员锁死自己之外无人解锁,拒绝(I8)。
         if body.get("disabled") and tid == request["teacher"]["id"]:
@@ -174,7 +182,9 @@ def _setup_admin_routes(router):
     async def add_class(request):
         if (r := admin_guard(request)):
             return r
-        body = await request.json()
+        body = await api.json_body(request)
+        if body is None:
+            return web.json_response({"error": "bad_request"}, status=400)
         name = (body.get("name") or "").strip()
         if not name:
             return web.json_response({"error": "bad_request"}, status=400)
@@ -203,7 +213,10 @@ def _setup_admin_routes(router):
         cid = int(request.match_info["id"])
         if db.execute("SELECT 1 FROM classes WHERE id=?", (cid,)).fetchone() is None:
             return web.json_response({"error": "not_found"}, status=404)
-        text = (await request.json()).get("text", "")
+        body = await api.json_body(request)
+        if body is None:
+            return web.json_response({"error": "bad_request"}, status=400)
+        text = body.get("text", "")
         imported, skipped = 0, []
         # 分隔符:换行 + ASCII/全角逗号 + 顿号(中文名单粘贴最常见三种)。
         for line in (text.replace(",", "\n").replace("，", "\n")

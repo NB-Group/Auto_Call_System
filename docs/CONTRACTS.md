@@ -108,3 +108,15 @@ bridge 新增(显示端小窗形态):
 GET /api/students/search 匹配优先级调整为:首字母前缀 > 全拼前缀 > **全拼包含(新增)** > 姓名子串
 (动机:同班多名学生共用名拼音,如 张嘉琪/王佳琪/李佳琪 均含 "jiaqi",前缀匹配漏人)。
 同级排序规则不变(逐字拼音序);响应结构、limit 默认值不变;短语搜索(/api/snippets/search)不变。
+
+## v1.6 增补(2026-09-04,v0.1.7 预备)
+bridge 新增(更新横幅真重启,H1):
+- `restart() -> null`   # 先以部署位 exe + 本角色参数拉起新进程,再关旧窗口;
+  拉起失败退回纯退出。前端 fallback:旧壳(无 restart)调 api.quit()
+行为修订:
+- 服务器角色 quit():先弹 confirm 确认(关服=全校中断);Alt+F4 等
+  旁路由 closing 兜底拦下(M1)
+- `--server-url` 钉死地址在服务器不可达时改走离线页 + 3s 重试
+  (同机开机竞态:显示端不再加载出打不开的死页)
+- 畸形 JSON 请求体一律 400 bad_request,不再 500(M6;login/
+  bootstrap_admin 等全部端点)

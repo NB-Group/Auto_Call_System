@@ -63,8 +63,46 @@ class Bridge:
     def quit(self) -> None:
         import webview
 
+        # M1:服务器角色的 × 不是普通关窗 —— daemon 服务器线程随进程
+        # 死,全校叫号静默中断。弹一次 JS confirm,同意才真关;main.py
+        # 的 closing 兜底拦 Alt+F4 等旁路。evaluate_js 在 js_api 线程里
+        # 调用,GUI 线程空闲,标准用法无死锁。
+        if self.role == "server" and not getattr(self, "_allow_close", False):
+            try:
+                ok = webview.windows[0].evaluate_js(
+                    "confirm('这是服务器:关闭后全校叫号会中断。\\n"
+                    "确定要关闭吗?')")
+            except Exception:
+                ok = True  # 判定失败不锁死人
+            if not ok:
+                return None
+            self._allow_close = True
         if webview.windows:
             webview.windows[0].destroy()
+
+    def restart(self) -> None:
+        """更新横幅「立即重启」(H1 修复):真重启,不是纯退出。
+
+        先拉起新进程再退旧窗口:顺序不能反,否则 display 这类无自启的
+        角色退出后没人拉起,黑屏到有人手动重开。新进程用部署位 exe
+        (original_exe_path,onefile 下 sys.executable 是临时解包文件)
+        带上本角色参数;拉起失败退回纯退出(横幅仍在,重开即新版)。
+        """
+        import subprocess
+
+        from app.config import original_exe_path
+
+        exe = original_exe_path()
+        if exe is not None:
+            try:
+                subprocess.Popen(
+                    [str(exe), "--role", self.role],
+                    cwd=str(exe.parent),
+                    close_fds=True,
+                )
+            except OSError:
+                pass  # 拉不起:退回纯退出,保守不炸
+        self.quit()
 
     def minimize(self) -> None:
         import webview

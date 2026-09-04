@@ -6,6 +6,7 @@
 # 日志: /tmp/school-deploy-<version>.log
 set -u
 V="${1:?usage: watch_school.sh <version>}"
+REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 LOG="/tmp/school-deploy-${V}.log"
 SSH_OPTS="-i $HOME/.ssh/id_ed25519 -p 11538 -o ConnectTimeout=8 -o BatchMode=yes -o StrictHostKeyChecking=accept-new"
 SCHOOL="hht@free.svipss.top"
@@ -70,7 +71,7 @@ Start-ScheduledTask -TaskName "CC-Server-Now"
 Write-Output "SERVER-STARTED"
 PS1
 cat > /tmp/cc-start-display.ps1 <<'PS1'
-$a = New-ScheduledTaskAction -Execute "C:\CallCenter\call-center.exe" -Argument "--role display"
+$a = New-ScheduledTaskAction -Execute "C:\CallCenter\call-center.exe" -Argument "--role display --server-url http://127.0.0.1:8800"
 $p = New-ScheduledTaskPrincipal -UserId "hht" -LogonType Interactive
 Register-ScheduledTask -TaskName "CC-Display-Now" -Action $a -Principal $p -Force | Out-Null
 Start-ScheduledTask -TaskName "CC-Display-Now"
@@ -78,6 +79,12 @@ Write-Output "DISPLAY-STARTED"
 PS1
 scp -i "$HOME/.ssh/id_ed25519" -P 11538 -o StrictHostKeyChecking=accept-new \
     /tmp/cc-start-server.ps1 /tmp/cc-start-display.ps1 "$SCHOOL:C:/CallCenter/" >>"$LOG" 2>&1
+# 自启 lnk 一并重生成:显示端与服务器同机,钉死 127.0.0.1,免 UDP 发现
+# 受防火墙 profile/多网卡影响(H3 加固);ps1 带 BOM,中文 lnk 名安全
+scp -i "$HOME/.ssh/id_ed25519" -P 11538 -o StrictHostKeyChecking=accept-new \
+    "$REPO/deploy/_setup_autostart.ps1" "$SCHOOL:C:/CallCenter/_setup_autostart.ps1" >>"$LOG" 2>&1
+timeout 30 ssh $SSH_OPTS "$SCHOOL" "powershell -ExecutionPolicy Bypass -File C:\CallCenter\_setup_autostart.ps1 -Role server" 2>&1 | grep -a autostart | tee -a "$LOG"
+timeout 30 ssh $SSH_OPTS "$SCHOOL" "powershell -ExecutionPolicy Bypass -File C:\CallCenter\_setup_autostart.ps1 -Role display -ServerUrl http://127.0.0.1:8800" 2>&1 | grep -a autostart | tee -a "$LOG"
 timeout 30 ssh $SSH_OPTS "$SCHOOL" "powershell -ExecutionPolicy Bypass -File C:\CallCenter\cc-start-server.ps1" 2>&1 | grep -a STARTED | tee -a "$LOG"
 timeout 30 ssh $SSH_OPTS "$SCHOOL" "powershell -ExecutionPolicy Bypass -File C:\CallCenter\cc-start-display.ps1" 2>&1 | grep -a STARTED | tee -a "$LOG"
 

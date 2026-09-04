@@ -41,11 +41,25 @@ def parse_args(argv=None):
     return p.parse_args(argv)
 
 
+def _url_reachable(url: str) -> bool:
+    """轻探:GET bootstrap status(1.5s 超时),通=服务器已可服务。"""
+    import urllib.request
+    try:
+        with urllib.request.urlopen(
+                f"{url.rstrip('/')}/api/bootstrap/status", timeout=1.5) as r:
+            return r.status == 200
+    except Exception:
+        return False
+
+
 def resolve_server_url(arg_url, dev):
     if dev:
         return DEV_URL
     if arg_url:
-        return arg_url
+        # 钉死地址(显示端与服务器同机)也有开机竞态:显示端可能赶在
+        # 服务器 bind 前加载 → WebView 打不开的死页(前端没加载,无法
+        # 自愈)。先探,探不到走离线页 + 重试,和发现失败同一条生路。
+        return arg_url if _url_reachable(arg_url) else None
     found = find_server(timeout=2.0)
     return f"http://{found['host']}:{found['port']}" if found else None
 
@@ -69,8 +83,11 @@ def main():
     # 更新:先换上已暂存的新版(frozen 才生效,本地操作,快)。
     # 新版探测+下载移入后台线程:镜像探测 3-4s 起步、下载更久,
     # 不能挡在窗口创建前(否则老师/显示端每次启动都白等数秒)。
-    from app.updater import install_pending
-    install_pending()
+    # M4:服务器角色不换新 —— 它是其他端的源头,与「不自动下载暂存」
+    # (下方 _stage_and_notify 门控)对称;残留 pending 不应在服务器机生效。
+    if role != "server":
+        from app.updater import install_pending
+        install_pending()
 
     if role == "server":
         from server.serve import start_server
@@ -93,7 +110,8 @@ def main():
                 threading.Thread(target=_stage_and_notify, args=(window,),
                                  daemon=True).start()
                 threading.Thread(target=_retry_find_server,
-                                 args=(window, role), daemon=True).start()
+                                 args=(window, role, args.server_url),
+                                 daemon=True).start()
             _start_gui()
             return
         url = f"{url}/#/{role}"
@@ -128,6 +146,14 @@ def main():
         window = webview.create_window(f"叫号系统 v{__version__}", url,
                                        js_api=bridge, frameless=FRAMELESS,
                                        easy_drag=False)
+    if role == "server":
+        # M1:服务器窗口误关 = 全校静默掉线(服务器线程 daemon 随进程死)。
+        # 一切未确认关闭(Alt+F4/任务栏右键)拦下;正常退出只走
+        # Bridge.quit():先弹确认,同意才置 _allow_close 再 destroy。
+        def _guard_closing():
+            return getattr(bridge, "_allow_close", False)
+
+        window.events.closing += _guard_closing
     # 服务器角色不自动更新(它是其他端的源头,由管理员手动控制)。
     if role in ("teacher", "display"):
         threading.Thread(target=_stage_and_notify, args=(window,),
@@ -193,18 +219,23 @@ def _stage_and_notify(window) -> None:
         pass  # 更新是尽力而为:任何失败都不得影响主窗口
 
 
-def _retry_find_server(window, role: str) -> None:
-    """离线重试:每 3s 找一次服务器,找到即把窗口切到正式页面(I5)。
+def _retry_find_server(window, role: str, pinned: str | None = None) -> None:
+    """离线重试:每 3s 找一次服务器(pinned 钉死地址优先),找到即切换。
 
     load_url 线程安全(pywebview 内部派发到 GUI 线程);窗口已被用户
     关闭时抛错,吞掉即止。窗口关闭 → webview.start() 返回 → 进程正常退出。
     """
     while True:
-        found = find_server(timeout=3.0)
-        if found is not None:
+        target = None
+        if pinned and _url_reachable(pinned):
+            target = pinned.rstrip("/")
+        else:
+            found = find_server(timeout=3.0)
+            if found is not None:
+                target = f"http://{found['host']}:{found['port']}"
+        if target is not None:
             try:
-                window.load_url(
-                    f"http://{found['host']}:{found['port']}/#/{role}")
+                window.load_url(f"{target}/#/{role}")
             except Exception:
                 pass
             return
@@ -322,7 +353,10 @@ _MINI_BAR_CSS = (
 
 
 def _offline_html() -> str:
-    return ("<html><head><style>" + _MINI_BAR_CSS + "</style></head>"
+    # charset 必带(L1):中文 Windows 上 WebView2 默认按本地码页猜,
+    # 内联 HTML 无声明时中文可能乱码,恰好只在最需要读清文案的失败路径
+    return ('<html><head><meta charset="utf-8"><style>' + _MINI_BAR_CSS
+            + "</style></head>"
             "<body style='font-family:sans-serif;padding:56px 40px 40px'>"
             + _chrome_bar("叫号中心")
             + "<h2>正在寻找叫号服务器…</h2>"
@@ -332,7 +366,8 @@ def _offline_html() -> str:
 
 def _error_html(err: str) -> str:
     import html as html_escape
-    return ("<html><head><style>" + _MINI_BAR_CSS + "</style></head>"
+    return ('<html><head><meta charset="utf-8"><style>' + _MINI_BAR_CSS
+            + "</style></head>"
             "<body style='font-family:sans-serif;padding:56px 40px 40px'>"
             + _chrome_bar("叫号中心")
             + "<h2>服务器启动失败</h2>"

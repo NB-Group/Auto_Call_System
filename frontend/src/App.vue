@@ -7,7 +7,12 @@ import TitleBar from './components/TitleBar.vue'
 const { initTheme } = useDark()
 const route = useRoute()
 const update = ref<{ version: string; notes: string } | null>(null)
-const restart = () => (window as any).pywebview?.api?.quit?.()
+// 真重启(壳 ≥0.1.7 先拉新进程再退);旧壳无 restart 时退回纯退出
+const restart = () => {
+  const api = (window as any).pywebview?.api
+  if (api?.restart) api.restart()
+  else api?.quit?.()
+}
 // 显示端(教室大屏)fullscreen 无边栏,不得被 40px 标题栏挤下去
 const showBar = computed(() => route.path !== '/display')
 

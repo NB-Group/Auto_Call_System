@@ -12,6 +12,20 @@ def _json_error(code: str, status: int) -> web.Response:
     return web.json_response({"error": code}, status=status)
 
 
+async def json_body(request) -> dict | None:
+    """请求体统一解析(M6):非 JSON / JSON 非 dict → None。
+
+    aiohttp 的 request.json() 对畸形 body 直接抛异常,handler 裸 await
+    会 500 —— 公网可达的端点(经隧道)会被扫描器打出一排 500。调用方
+    拿到 None 一律回 400 bad_request。
+    """
+    try:
+        data = await request.json()
+    except Exception:
+        return None
+    return data if isinstance(data, dict) else None
+
+
 def _int_or_none(raw) -> int | None:
     try:
         return int(raw)
@@ -67,7 +81,9 @@ def setup_business_routes(router: web.UrlDispatcher) -> None:
 
     async def update_me(request):
         t, db = request["teacher"], request.app["db"]
-        body = await request.json()
+        body = await json_body(request)
+        if body is None:
+            return _json_error("bad_request", 400)
         fields = {k: body[k] for k in ("display_name", "office",
                                        "default_template") if k in body}
         if not fields:
@@ -102,7 +118,9 @@ def setup_business_routes(router: web.UrlDispatcher) -> None:
 
     async def create_call(request):
         t, db = request["teacher"], request.app["db"]
-        body = await request.json()
+        body = await json_body(request)
+        if body is None:
+            return _json_error("bad_request", 400)
         sid = body.get("student_id")
         if not isinstance(sid, int):
             return _json_error("bad_request", 400)
@@ -172,7 +190,10 @@ def setup_business_routes(router: web.UrlDispatcher) -> None:
             snippet_rows(request.app["db"], request["teacher"]["id"]))
 
     async def add_snippet(request):
-        text = (await request.json()).get("text", "").strip()
+        body = await json_body(request)
+        if body is None:
+            return _json_error("bad_request", 400)
+        text = body.get("text", "").strip()
         if not text:
             return _json_error("bad_request", 400)
         db = request.app["db"]

@@ -139,3 +139,116 @@ def test_retry_find_server_loads_url(monkeypatch):
 
     main_mod._retry_find_server(FakeWindow(), "teacher")
     assert calls == ["http://10.1.2.3:8800/#/teacher"]
+
+
+def test_retry_find_server_prefers_pinned(monkeypatch):
+    """开机竞态(v0.1.7):钉死地址可达时优先于广播发现,且去尾部斜杠。"""
+    monkeypatch.setattr(main_mod, "_url_reachable",
+                        lambda url: url == "http://127.0.0.1:8800/")
+    monkeypatch.setattr(main_mod, "find_server",
+                        lambda timeout=3.0: {"host": "10.9.9.9", "port": 8800})
+    calls = []
+
+    class FakeWindow:
+        def load_url(self, url):
+            calls.append(url)
+
+    main_mod._retry_find_server(FakeWindow(), "display",
+                                pinned="http://127.0.0.1:8800/")
+    assert calls == ["http://127.0.0.1:8800/#/display"]
+
+
+def test_resolve_server_url_pinned_unreachable(monkeypatch):
+    """钉死地址探不通 → None → 走离线页重试,不加载打不开的死页。"""
+    monkeypatch.setattr(main_mod, "_url_reachable", lambda url: False)
+    assert main_mod.resolve_server_url("http://127.0.0.1:8800", False) is None
+    monkeypatch.setattr(main_mod, "_url_reachable", lambda url: True)
+    assert main_mod.resolve_server_url("http://127.0.0.1:8800", False) \
+        == "http://127.0.0.1:8800"
+
+
+def test_restart_relanches_then_quits(monkeypatch, tmp_path):
+    """H1:更新横幅「重启」先拉新进程再退旧窗(纯退出=显示端黑屏)。"""
+    import subprocess
+    import webview
+
+    exe = tmp_path / "call-center.exe"
+    exe.write_bytes(b"x")
+    monkeypatch.setattr("sys.argv", [str(exe)])
+    spawned, destroyed = [], []
+
+    class FakeWin:
+        def destroy(self):
+            destroyed.append(1)
+
+    monkeypatch.setattr(webview, "windows", [FakeWin()])
+    monkeypatch.setattr(subprocess, "Popen",
+                        lambda args, **k: spawned.append(args))
+
+    b = Bridge("display", TTSService(backend=NullBackend(), repeat=1))
+    b.restart()
+    assert spawned == [[str(exe), "--role", "display"]]
+    assert destroyed == [1]  # 拉起成功也要退旧窗
+
+
+def test_restart_falls_back_to_quit_when_no_exe(monkeypatch):
+    """拿不到部署位(如源码运行):退回纯退出,不得炸。"""
+    import webview
+
+    monkeypatch.setattr("sys.argv", ["not-an-exe.py"])
+    destroyed = []
+
+    class FakeWin:
+        def destroy(self):
+            destroyed.append(1)
+
+    monkeypatch.setattr(webview, "windows", [FakeWin()])
+    b = Bridge("teacher", TTSService(backend=NullBackend(), repeat=1))
+    b.restart()
+    assert destroyed == [1]
+
+
+def test_server_quit_requires_confirmation(monkeypatch):
+    """M1:服务器角色 × 弹 confirm,取消 → 不关;同意 → 关。"""
+    import webview
+
+    destroyed = []
+
+    class FakeWin:
+        def __init__(self, answer):
+            self._answer = answer
+
+        def evaluate_js(self, js):
+            assert "confirm" in js
+            return self._answer
+
+        def destroy(self):
+            destroyed.append(1)
+
+    b = Bridge("server", TTSService(backend=NullBackend(), repeat=1))
+    monkeypatch.setattr(webview, "windows", [FakeWin(False)])
+    b.quit()
+    assert destroyed == []          # 取消:拦下
+    monkeypatch.setattr(webview, "windows", [FakeWin(True)])
+    b.quit()
+    assert destroyed == [1]         # 同意:真关
+    b.quit()                        # 已确认过(旗标):二次直接关
+    assert len(destroyed) == 2
+
+
+def test_teacher_quit_no_confirmation(monkeypatch):
+    """非服务器角色关窗不弹确认(体验不回退)。"""
+    import webview
+
+    destroyed, js = [], []
+
+    class FakeWin:
+        def evaluate_js(self, j):
+            js.append(j)
+
+        def destroy(self):
+            destroyed.append(1)
+
+    monkeypatch.setattr(webview, "windows", [FakeWin()])
+    Bridge("teacher", TTSService(backend=NullBackend(), repeat=1)).quit()
+    assert destroyed == [1] and js == []

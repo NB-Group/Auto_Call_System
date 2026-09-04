@@ -21,6 +21,12 @@ def test_broadcast_and_discover():
 
 
 def test_discover_returns_none_when_silent():
+    # 环境护栏:本测试的语义是「LAN 上无广播者 → None」。开发机上常有
+    # 昨天调试残留的真服务器在广播(曾致全量跑随机红),先探到就跳过,
+    # 不把环境污染误报成代码回归。
+    if find_server(timeout=0.3) is not None:
+        import pytest
+        pytest.skip("LAN 上有真实广播者(开发机残留服务器)")
     # 广播端先占用再停止,确保静默
     b = Broadcaster(8800, "0.1.0", interval=0.1)
     b.start(); time.sleep(0.3); b.stop()
