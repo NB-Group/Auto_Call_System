@@ -39,23 +39,36 @@ def render_template(template: str, student: str, teacher: str, office: str) -> s
             .replace("{office}", office))
 
 
+DEFAULT_TEMPLATE = "请{student}同学到{teacher}{office}"
+
+
 def call_row(conn, call_id: int) -> dict | None:
+    """叫号行组装(历史/今日/创建共用)。
+
+    teachers 用 LEFT JOIN(L6):老师被删除后其历史叫号不应从 today/
+    history 消失——数据还在表里,INNER JOIN 丢行 = 静默篡改历史。
+    缺老师时名字回退「已删除」,模板/办公室回退默认(渲染不炸)。
+    students/classes 保持 INNER:级联删除下无孤儿行语义。
+    """
     r = conn.execute(
         "SELECT c.*, s.name AS student_name, k.name AS class_name, "
         "       t.display_name AS teacher_name, t.office, t.default_template "
         "FROM calls c "
         "JOIN students s ON s.id=c.student_id "
         "JOIN classes  k ON k.id=c.class_id "
-        "JOIN teachers t ON t.id=c.teacher_id "
+        "LEFT JOIN teachers t ON t.id=c.teacher_id "
         "WHERE c.id=?", (call_id,)).fetchone()
     if r is None:
         return None
     d = {k: r[k] for k in ("id", "student_id", "class_id", "teacher_id",
                            "message", "created_at", "retracted_at",
-                           "student_name", "class_name", "teacher_name",
-                           "office")}
-    announce = render_template(r["default_template"], r["student_name"],
-                               r["teacher_name"], r["office"])
+                           "student_name", "class_name")}
+    d["teacher_name"] = r["teacher_name"] or "已删除"
+    template = r["default_template"] or DEFAULT_TEMPLATE
+    office = r["office"] or ""
+    d["office"] = office
+    announce = render_template(template, r["student_name"],
+                               d["teacher_name"], office)
     d["announce"] = announce + f",{d['message']}" if d["message"] else announce
     return d
 

@@ -207,3 +207,30 @@ async def test_admin_undo_bypasses_window(client):
     r = await client.delete(f"/api/calls/{cid}", headers=admin_headers)
     assert r.status == 200
     assert await r.json() == {"ok": True}
+
+
+def test_history_survives_teacher_deletion(client):
+    """L6:删除老师后其历史叫号不消失——数据还在,只是名字回退「已删除」。"""
+    from server.api import call_row
+
+    db = client.db
+    tid = db.execute(
+        "INSERT INTO teachers(username,password_hash,role,display_name,office)"
+        " VALUES('tmp1','x','teacher','临时老师','教务处')").execute(
+        "SELECT last_insert_rowid()").fetchone()[0]
+    sid = db.execute(
+        "INSERT INTO students(class_id,name) VALUES(1,'测试生')").execute(
+        "SELECT last_insert_rowid()").fetchone()[0]
+    cid = db.execute(
+        "INSERT INTO calls(student_id,class_id,teacher_id,message) "
+        "VALUES(?,1,?,'带上练习册')", (sid, tid)).execute(
+        "SELECT last_insert_rowid()").fetchone()[0]
+    before = call_row(db, cid)
+    assert before["teacher_name"] == "临时老师"
+
+    db.execute("DELETE FROM teachers WHERE id=?", (tid,))
+    db.commit()
+    after = call_row(db, cid)
+    assert after is not None                     # 行还在(L6 核心)
+    assert after["teacher_name"] == "已删除"      # 名字回退
+    assert "测试生" in after["announce"]          # 渲染不炸,模板回退默认
