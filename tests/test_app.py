@@ -1,3 +1,4 @@
+import sys
 import pytest
 from aiohttp import web
 
@@ -174,3 +175,59 @@ async def test_static_index_served(client):
     r = await client.get("/")
     assert r.status == 200
     assert "app" in await r.text()
+
+
+def test_is_frozen_source_vs_patched(monkeypatch):
+    """frozen 判定:源码运行 False;sys.frozen 补 True 后 True。
+    (真实 exe 命中 __compiled__ 分支,源码/测试侧只能走 sys.frozen 模拟。)
+    """
+    from app.config import is_frozen
+
+    monkeypatch.delattr(sys, "frozen", raising=False)
+    assert is_frozen() is False
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    assert is_frozen() is True
+
+
+def test_base_dir_frozen_anchors_appdata(tmp_path, monkeypatch):
+    """frozen 下锚 %APPDATA%/call-center(2026-09-04 实证:Nuitka 构建里
+    sys.frozen 不存在,APPDATA 锚定从未生效,库落进 CWD\\data/System32)。"""
+    from app import config as cfg
+
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    monkeypatch.setattr(cfg, "_migrated", False)  # 迁移哨兵按例重置
+    assert cfg.base_dir() == tmp_path / "call-center"
+
+
+def test_migrate_legacy_moves_cwd_data_into_appdata(tmp_path, monkeypatch):
+    """旧布局(exe 旁 data/)一次性迁入 %APPDATA%;新址已有 data 则不动。"""
+    import shutil
+
+    from app import config as cfg
+
+    exe_dir = tmp_path / "deploy"
+    exe_dir.mkdir()
+    (exe_dir / "data").mkdir()
+    (exe_dir / "data" / "call.db").write_bytes(b"olddb")
+    root = tmp_path / "appdata" / "call-center"
+
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setenv("APPDATA", str(tmp_path / "appdata"))
+    monkeypatch.setattr(cfg, "_migrated", False)
+    monkeypatch.setattr(cfg, "original_exe_path",
+                        lambda: exe_dir / "call-center.exe")
+    got = cfg.base_dir()
+    assert got == root
+    assert (root / "data" / "call.db").read_bytes() == b"olddb"   # 已迁入
+    assert not (exe_dir / "data").exists()                         # 旧址清走
+
+    # 新址已有 data:再迁(模拟另一部署位)不覆盖
+    other = tmp_path / "deploy2"
+    (other / "data").mkdir(parents=True)
+    (other / "data" / "call.db").write_bytes(b"other")
+    monkeypatch.setattr(cfg, "_migrated", False)
+    monkeypatch.setattr(cfg, "original_exe_path",
+                        lambda: other / "call-center.exe")
+    cfg.base_dir()
+    assert (root / "data" / "call.db").read_bytes() == b"olddb"    # 未被覆盖

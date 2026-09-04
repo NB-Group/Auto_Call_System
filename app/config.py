@@ -9,6 +9,17 @@ from pathlib import Path
 _migrated = False
 
 
+def is_frozen() -> bool:
+    """是否运行在打包 exe 里。
+
+    sys.frozen 是 PyInstaller 惯例,我们的 Nuitka 构建**不设**该属性
+    (2026-09-04 .50 实证:frozen exe 走了源码分支,库落进 CWD\\data,
+    System32 里长出 call.db)——Nuitka 的官方判定标记是 __compiled__。
+    两个都查:源码/测试用 sys.frozen 猴补模拟,真实 exe 命中 __compiled__。
+    """
+    return bool(getattr(sys, "frozen", False)) or "__compiled__" in globals()
+
+
 def base_dir() -> Path:
     """数据目录锚点(Task-21):frozen(exe)→ %APPDATA%/call-center,
     源码运行锚定 CWD。
@@ -16,7 +27,7 @@ def base_dir() -> Path:
     旧版锚在 exe 旁,更新覆盖 exe 时整目录陪葬;迁出后 config/db/
     updates/startup-error 全部落在新址,升级不再丢数据。
     """
-    if not getattr(sys, "frozen", False):
+    if not is_frozen():
         return Path(".")
     root = Path(os.environ.get("APPDATA") or Path.home()) / "call-center"
     _migrate_legacy(root)

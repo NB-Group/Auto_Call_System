@@ -13,7 +13,7 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from app.config import base_dir, load_config, original_exe_path
+from app.config import base_dir, is_frozen, load_config, original_exe_path
 
 DEFAULT_MIRRORS = [
     "",  # 直连
@@ -23,10 +23,10 @@ DEFAULT_MIRRORS = [
     "https://ghproxy.homeboyc.cn/",
     "https://gh.zwy.one/",
 ]
-# 锚定下载目录:frozen 包跟 exe 同盘同级(updates/),源码运行用工作区 data/。
-# 在模块导入时求值(frozen 属性由 PyInstaller 在用户代码前设置)。
-UPDATE_DIR = base_dir() / ("updates" if getattr(sys, "frozen", False)
-                           else "data/updates")
+# 锚定下载目录:frozen(exe)→ %APPDATA%/call-center/updates,源码运行用
+# 工作区 data/。模块导入时求值一次(is_frozen:__compiled__ 标记,
+# sys.frozen 在 Nuitka 构建里不存在——曾致该锚点在真实 exe 中失效)。
+UPDATE_DIR = base_dir() / ("updates" if is_frozen() else "data/updates")
 
 
 def parse_version(v: str) -> tuple:
@@ -145,8 +145,13 @@ def stage_update(current: str, repo: str, mirrors: list[str] | None = None,
 
 
 def install_pending() -> bool:
-    """启动时调用:pending.exe 存在则改名换新(Windows 运行中 exe 可改名)。"""
-    if not getattr(sys, "frozen", False):
+    """启动时调用:pending.exe 存在则改名换新(Windows 运行中 exe 可改名)。
+
+    注意 is_frozen()(__compiled__):旧判定 sys.frozen 在 Nuitka 构建
+    里恒 False → 本函数在所有已发布 exe 中从未执行过,自更新替换
+    整条链路一直是死的(v0.1.7 修复)。
+    """
+    if not is_frozen():
         return False
     if not UPDATE_DIR.exists():  # 目录不在则 pending 必不在,早退
         return False
