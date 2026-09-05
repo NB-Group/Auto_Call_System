@@ -81,10 +81,11 @@ export function reduce(
       return { state: { ...initial }, effect: null }
     case 'sent':
       return { state: { ...initial }, effect: null }
-    // B3 一键清空(Ctrl+L):query/chips/picks 全清、退回选生阶段。
-    // 与 esc 不同:esc 在拼装阶段先只弹 chips(渐进退出),clear 是无条件全清。
+    // B3 清空输入(Ctrl+L):只清 query(拼音/自由文本),保留已选学生、
+    // 短语与阶段 —— 用户流程是连着叫下一批:敲 lhw→空格选人→Ctrl+L 清
+    // 掉→敲下一人。无条件全清是 esc 的活(fresh start)。
     case 'clear':
-      return { state: { ...initial }, effect: null }
+      return { state: { ...s, query: '', activeIndex: 0 }, effect: null }
   }
 }
 

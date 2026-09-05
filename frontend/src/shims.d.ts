@@ -10,6 +10,7 @@ declare global {
         get_role?: () => string
         app_version?: () => string
         quit?: () => void
+        minimize?: () => void
       }
     }
   }

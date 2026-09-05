@@ -97,6 +97,7 @@ function onPicked(id: number, name: string) {
 }
 
 const quit = () => window.pywebview?.api?.quit?.()
+const minimize = () => window.pywebview?.api?.minimize?.()
 
 onMounted(async () => {
   forceDark()
@@ -142,7 +143,22 @@ const calledCount = computed(() => marquee.value.length)
 </script>
 
 <template>
-  <div v-if="!picked" h-full overflow-y-auto><ClassPicker @picked="onPicked" /></div>
+  <!-- 选班级态:自绘迷你标题栏(frameless 小窗此时无任何可拖/可关区域,
+       2026-09-05 用户实测「选完班级才有标题栏」)。拖拽区 = 壳注入的
+       .pywebview-drag-region;按钮 mousedown 阻冒泡防误拖。 -->
+  <div v-if="!picked" h-full flex="~ col" overflow-hidden>
+    <header class="pywebview-drag-region" flex="~ items-center justify-between"
+            shrink-0 h-30px px-4 text-12px style="color: var(--cc-text-3)">
+      <span>教室端 · 选班</span>
+      <span flex="~ items-center" gap-1>
+        <button title="最小化" px-2 op-70 hover:op-100
+                @mousedown.stop @click="minimize">─</button>
+        <button title="关闭" px-2 op-70 hover:op-100
+                @mousedown.stop @click="quit">×</button>
+      </span>
+    </header>
+    <div flex-1 overflow-y-auto><ClassPicker @picked="onPicked" /></div>
+  </div>
   <!-- Task-23:小窗(收起)↔ 全屏(展开)两形态;右下角原点缩放切换,
        out-in 让旧形态先收进角落、新形态再从角落长出来 -->
   <div v-else h-full overflow-hidden pos-relative flex="~">

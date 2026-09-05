@@ -78,6 +78,10 @@ body {
 
 /* 工具类(Uno 管布局,这里管玻璃质感) */
 .glass-card {
+  /* 必须显式给色:<button> 不继承 color(UA 默认 buttontext=黑),
+     浅色主题下恰好≈text-1 从没露馅,显示端强制深色后黑字黑底
+     (2026-09-05 ClassPicker 实测,Chrome/WebKitGTK 双引擎复现) */
+  color: var(--cc-text-1);
   background: var(--cc-content);
   backdrop-filter: var(--cc-glass-1);
   -webkit-backdrop-filter: var(--cc-glass-1);

@@ -138,28 +138,30 @@ describe('palette 状态机', () => {
     expect(st.activeIndex).toBe(0)
   })
 
-  it('B3 clear:从任意脏状态一键全清(query/chips/students/picked),回选生阶段', () => {
+  it('B3 clear:只清输入框(query),保留已选学生/短语/阶段(用户流程:连着叫下一批)', () => {
     const dirty: PaletteState = {
       phase: 'compose', students: [S, S2], chips: [SN], query: 'd',
       freeText: true, activeIndex: 3, picked: [],
     }
     const { state, effect } = reduce(dirty, { t: 'clear' })
-    expect(state).toEqual(initial)
+    expect(state).toEqual({ ...dirty, query: '', activeIndex: 0 }) // 其余原样
     expect(effect).toBeNull()
-    // 选生阶段的 query + picked 同样全清
+    // 选生阶段:query 清空,picked 留住接着选下一人
     let st = reduce(initial, { t: 'type', ch: 'l' }).state
     st = reduce(st, { t: 'space', students: [S] }).state
     st = reduce(st, { t: 'clear' }).state
-    expect(st).toEqual(initial)
-    expect(st.picked).toEqual([])
     expect(st.query).toBe('')
+    expect(st.picked).toEqual([S])
+    expect(st.phase).toBe('student')
   })
 
-  it('B3 clear 与 esc 语义不同:esc 在拼装阶段先只弹 chips,clear 无条件全清', () => {
+  it('B3 clear 与 esc 语义不同:esc 才是无条件全清(fresh start)', () => {
     const compose: PaletteState = { ...initial, phase: 'compose', students: [S], chips: [SN] }
-    expect(reduce(compose, { t: 'esc' }).state.chips).toEqual([]) // 渐进退出
-    expect(reduce(compose, { t: 'esc' }).state.phase).toBe('compose')
-    expect(reduce(compose, { t: 'clear' }).state).toEqual(initial) // 一步到位
+    let once = reduce(compose, { t: 'esc' }).state
+    expect(once.chips).toEqual([])          // 渐进:第一下只弹短语
+    expect(once.phase).toBe('compose')      // 仍在拼装,学生留着
+    expect(reduce(once, { t: 'esc' }).state).toEqual(initial) // 第二下才 fresh start
+    expect(reduce(compose, { t: 'clear' }).state.students).toEqual([S]) // clear 不动结构
   })
 
   it('B3 planKeydown:Ctrl+L 映射 clear,裸 l 放行(不吞输入)', () => {
