@@ -110,8 +110,11 @@ function onSpace(
   const snip = snippets[Math.min(s.activeIndex, snippets.length - 1)]
   if (!snip) return { state: s, effect: null }
   if (s.chips.some(c => c.id === snip.id))
-    return { state: { ...s, query: '', activeIndex: 0 }, effect: null }
-  return { state: { ...s, chips: [...s.chips, snip], query: '', activeIndex: 0 }, effect: null }
+    return { state: { ...s }, effect: null }
+  // 挂载后原地不动(与选生空格同款现场感):列表仍按当前 query 过滤、
+  // 高亮仍在原行 —— 用户反馈「选了会跳回第一个」即因清 query 导致
+  // 列表弹回全量。敲下一条短语前 Ctrl+L(与选生流程一致)。
+  return { state: { ...s, chips: [...s.chips, snip] }, effect: null }
 }
 
 function onEnter(
@@ -146,8 +149,14 @@ function onEnter(
     if (e.snippets.length) {
       const snip = e.snippets[Math.min(s.activeIndex, e.snippets.length - 1)]
       if (s.chips.some(c => c.id === snip.id))
-        return { state: { ...s, query: '' }, effect: null }
-      return { state: { ...s, chips: [...s.chips, snip], query: '', activeIndex: 0 }, effect: null }
+        // 已挂载过:回车不再哑火(query 保留后这里曾变成去重 no-op,
+        // 发送卡死),视为发送确认 —— 「空格挂载→回车发送」一把顺
+        return {
+          state: { ...initial },
+          effect: { kind: 'send', students: s.students,
+                    snippetIds: s.chips.map(c => c.id), freeText: '' },
+        }
+      return { state: { ...s, chips: [...s.chips, snip] }, effect: null }
     }
     return {
       state: { ...initial },

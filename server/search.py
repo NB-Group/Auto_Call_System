@@ -12,6 +12,10 @@ def _score(q: str, row) -> int | None:
     ql = q.strip().lower()
     if not ql:
         return None
+    # 学号检索(2026-09-05 用户实测需求):学号前缀与首字母前缀同级
+    # 最高 —— 名单按学号排,老师常直接敲 03 找 0305 的学生。
+    if row["student_no"] and row["student_no"].lower().startswith(ql):
+        return 0
     if row["pinyin_initials"].startswith(ql):
         return 0
     if row["pinyin_full"].startswith(ql):
@@ -33,7 +37,7 @@ def _name_key(name: str) -> tuple:
 def search_students(conn, q: str, limit: int = 8) -> list[dict]:
     rows = conn.execute(
         "SELECT s.id, s.name, s.pinyin_full, s.pinyin_initials, "
-        "       c.name AS class_name "
+        "       s.student_no, c.name AS class_name "
         "FROM students s JOIN classes c ON c.id = s.class_id").fetchall()
     scored = [(s, r) for r in rows if (s := _score(q, r)) is not None]
     scored.sort(key=lambda t: (t[0], _name_key(t[1]["name"])))

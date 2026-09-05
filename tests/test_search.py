@@ -66,3 +66,16 @@ def test_limit_and_shape(db):
     rows = search_students(db, "l", 2)
     assert len(rows) == 2
     assert set(rows[0]) == {"id", "name", "class_name", "pinyin_initials"}
+
+
+def test_student_no_search(db):
+    """学号检索(2026-09-05):学号前缀最高级匹配,数字直达。"""
+    db.execute(
+        "INSERT INTO students(class_id,name,pinyin_full,pinyin_initials,"
+        "student_no) VALUES (1,'赵无极',?,?,?)",
+        (*pinyin_of("赵无极"), "0305"))
+    db.commit()
+    assert [r["name"] for r in search_students(db, "0305")] == ["赵无极"]
+    assert [r["name"] for r in search_students(db, "03")] == ["赵无极"]
+    # 拼音检索不受影响
+    assert [r["name"] for r in search_students(db, "zwj")] == ["赵无极"]

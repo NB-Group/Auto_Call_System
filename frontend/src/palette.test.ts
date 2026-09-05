@@ -73,7 +73,8 @@ describe('palette 状态机', () => {
     st = reduce(st, { t: 'type', ch: 'd' }).state
     st = reduce(st, { t: 'enter', students: [], snippets: [SN] }).state
     expect(st.chips.map(c => c.text)).toEqual(['订正数学作业'])
-    expect(st.query).toBe('')
+    expect(st.query).toBe('d') // 2026-09-05:挂载后现场保留(query 不清)
+    // 挂载过的短语上再回车 = 发送确认(不再哑火)
     const { state, effect } = reduce(st, { t: 'enter', students: [], snippets: [SN] })
     expect(effect).toEqual({ kind: 'send', students: [S], snippetIds: [7], freeText: '' })
     expect(state.phase).toBe('student')
@@ -194,18 +195,17 @@ describe('palette 状态机', () => {
 describe('compose 阶段空格挂短语', () => {
   const compose = { ...initial, phase: 'compose' as const, students: [S] }
 
-  it('空格 = 挂高亮短语 chip 并清 query(备敲下一个短语)', () => {
-    const st = reduce({ ...compose, query: 'dz' }, { t: 'space', students: [], snippets: [SN] }).state
+  it('空格 = 挂高亮短语 chip,现场不动(query/高亮保留,同选生肌肉记忆)', () => {
+    const st = reduce({ ...compose, query: 'dz', activeIndex: 1 }, { t: 'space', students: [], snippets: [SN] }).state
     expect(st.chips).toEqual([SN])
-    expect(st.query).toBe('')
-    expect(st.activeIndex).toBe(0)
+    expect(st.query).toBe('dz')
+    expect(st.activeIndex).toBe(1)
   })
 
-  it('重复挂载去重:同短语再空格只清 query,chips 不重复', () => {
+  it('重复挂载去重:同短语再空格状态不变', () => {
     const st = reduce({ ...compose, query: 'dz', chips: [SN] },
       { t: 'space', students: [], snippets: [SN] }).state
     expect(st.chips).toEqual([SN])
-    expect(st.query).toBe('')
   })
 
   it('无匹配短语时空格不动(不误清、不误发;发送仍走回车)', () => {
