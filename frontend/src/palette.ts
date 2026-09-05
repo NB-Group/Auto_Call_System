@@ -26,7 +26,7 @@ export type PaletteEvent =
   | { t: 'backspace' }
   | { t: 'up' }
   | { t: 'down' }
-  | { t: 'space'; students: StudentHit[] }
+  | { t: 'space'; students: StudentHit[]; snippets?: Snippet[] }
   | { t: 'unpick'; id: number }
   | { t: 'enter'; students: StudentHit[]; snippets: Snippet[] }
   | { t: 'tab' }
@@ -65,7 +65,7 @@ export function reduce(
     case 'down':
       return { state: { ...s, activeIndex: s.activeIndex + 1 }, effect: null }
     case 'space':
-      return onSpace(s, e.students)
+      return onSpace(s, e.students, e.snippets)
     case 'unpick':
       return { state: { ...s, picked: s.picked.filter(p => p.id !== e.id) }, effect: null }
     case 'enter':
@@ -89,19 +89,29 @@ export function reduce(
   }
 }
 
-// 空格:把当前高亮的学生加入/移出 picked(dedupe by id)。
-// 保留 query 与 activeIndex —— 老师可以继续输入拼音缩小范围接着选。
+// 空格:与选生同肌肉记忆(2026-09-05 用户实测反馈)——
+// 选生阶段:高亮学生加入/移出 picked(dedupe by id),保留 query 继续
+// 输拼音缩小范围;拼装阶段:高亮短语挂为 chip(去重),清 query 备敲
+// 下一个短语;无匹配时不动(发送仍走回车,防止误发)。
 function onSpace(
   s: PaletteState,
   students: StudentHit[],
+  snippets: Snippet[] = [],
 ): { state: PaletteState; effect: null } {
-  if (s.phase !== 'student' || !students.length) return { state: s, effect: null }
-  const hit = students[Math.min(s.activeIndex, students.length - 1)]
-  const has = s.picked.some(p => p.id === hit.id)
-  return {
-    state: { ...s, picked: has ? s.picked.filter(p => p.id !== hit.id) : [...s.picked, hit] },
-    effect: null,
+  if (s.phase === 'student') {
+    if (!students.length) return { state: s, effect: null }
+    const hit = students[Math.min(s.activeIndex, students.length - 1)]
+    const has = s.picked.some(p => p.id === hit.id)
+    return {
+      state: { ...s, picked: has ? s.picked.filter(p => p.id !== hit.id) : [...s.picked, hit] },
+      effect: null,
+    }
   }
+  const snip = snippets[Math.min(s.activeIndex, snippets.length - 1)]
+  if (!snip) return { state: s, effect: null }
+  if (s.chips.some(c => c.id === snip.id))
+    return { state: { ...s, query: '', activeIndex: 0 }, effect: null }
+  return { state: { ...s, chips: [...s.chips, snip], query: '', activeIndex: 0 }, effect: null }
 }
 
 function onEnter(

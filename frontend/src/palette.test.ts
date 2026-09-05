@@ -188,3 +188,34 @@ describe('palette 状态机', () => {
     expect(planKeydown({ key: 'x' })).toBeNull()
   })
 })
+
+// ===== 2026-09-05 用户反馈:短语输入与姓名输入同肌肉记忆(空格挂载) =====
+describe('compose 阶段空格挂短语', () => {
+  const compose = { ...initial, phase: 'compose' as const, students: [S] }
+
+  it('空格 = 挂高亮短语 chip 并清 query(备敲下一个短语)', () => {
+    const st = reduce({ ...compose, query: 'dz' }, { t: 'space', students: [], snippets: [SN] }).state
+    expect(st.chips).toEqual([SN])
+    expect(st.query).toBe('')
+    expect(st.activeIndex).toBe(0)
+  })
+
+  it('重复挂载去重:同短语再空格只清 query,chips 不重复', () => {
+    const st = reduce({ ...compose, query: 'dz', chips: [SN] },
+      { t: 'space', students: [], snippets: [SN] }).state
+    expect(st.chips).toEqual([SN])
+    expect(st.query).toBe('')
+  })
+
+  it('无匹配短语时空格不动(不误清、不误发;发送仍走回车)', () => {
+    const st = { ...compose, query: 'zzz' }
+    expect(reduce(st, { t: 'space', students: [], snippets: [] }).state).toEqual(st)
+  })
+
+  it('连挂两条:dz 空格 → 敲第二条空格,chips 依序累积', () => {
+    const SN2: Snippet = { id: 9, text: '带上练习册', use_count: 0 }
+    let st = reduce({ ...compose, query: 'dz' }, { t: 'space', students: [], snippets: [SN] }).state
+    st = reduce({ ...st, query: 'lx' }, { t: 'space', students: [], snippets: [SN2] }).state
+    expect(st.chips.map(c => c.text)).toEqual([SN.text, SN2.text])
+  })
+})

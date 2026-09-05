@@ -85,9 +85,14 @@ function onKeydown(ev: KeyboardEvent) {
       ev.preventDefault()
       return
     case 'space':
-      // 选生阶段空格 = 多选;拼装阶段空格是自由文本的一部分,放行
+      // 选生阶段空格 = 多选;拼装阶段 = 挂载高亮短语(与选生同肌肉记忆,
+      // 2026-09-05 用户反馈);自由文本模式下空格是内容,放行给输入框
       if (state.value.phase === 'student') {
         dispatch({ t: 'space', students: students.value })
+        ev.preventDefault()
+      }
+      else if (!state.value.freeText) {
+        dispatch({ t: 'space', students: [], snippets: snippets.value })
         ev.preventDefault()
       }
       return
@@ -118,7 +123,7 @@ const PLACEHOLDER = computed(() =>
   state.value.phase === 'student'
     ? '输入姓名或拼音(如 lhw),空格多选 · Ctrl+L 清空…'
     : state.value.freeText ? '自由输入附加消息,回车发送…'
-    : '选短语(如 dz)回车挂载 · Tab 自由输入 · Ctrl+L 清空')
+    : '选短语(如 dz)空格挂载 · Tab 自由输入 · Ctrl+L 清空')
 </script>
 
 <template>
