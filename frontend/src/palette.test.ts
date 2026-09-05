@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { initial, planKeydown, reduce } from './palette'
 import type { PaletteState } from './palette'
+import type { Snippet } from './api'
 
 const S = { id: 1, name: '梁皓文', class_name: '高二(3)班', pinyin_initials: 'lhw' }
 const S2 = { id: 2, name: '王小雨', class_name: '高二(3)班', pinyin_initials: 'wxy' }
